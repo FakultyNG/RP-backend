@@ -1,1 +1,5 @@
-openHandlesTimeout: 2 * 1000;
+module.exports = {
+     testEnvironment: "node",
+     openHandlesTimeout: 2000,
+     clearMocks: true,
+};

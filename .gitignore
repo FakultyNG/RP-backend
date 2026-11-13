@@ -1,8 +1,20 @@
 /node_modules
 
-# .env
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Credentials must be supplied outside the repository
+/credentials/
+**/*service-account*.json
+**/*adminsdk*.json
+/src/reeplay-*.json
 
 /media
+/coverage
+/tmp
 branch_structure.json
 temp_auto_push.bat
 temp_interactive_push.bat

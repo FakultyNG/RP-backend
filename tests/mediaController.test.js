@@ -4,11 +4,14 @@ const app = require("../src/app");
 const path = require("path");
 const fs = require("fs");
 
-const customerToken = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2NjM2OTg2M2M1M2VmZDZhMDdlMWQwOTMiLCJlbWFpbCI6ImF5b2JhbWlhZGVveWU5OTlAZ21haWwuY29tIiwicm9sZSI6ImN1c3RvbWVyIiwiaWF0IjoxNzIxNjg1NDA5LCJleHAiOjE3MjE5NDQ2MDl9.l7-6od8dDPmS6rDLRB4kU3dCj1oB9n4fXNLqb_txhvM`;
+const customerToken = process.env.TEST_CUSTOMER_TOKEN;
 
 const timeOut = 2 * 60 * 1000;
 
-describe("User Media Controller", () => {
+const externalDescribe =
+     process.env.RUN_EXTERNAL_TESTS === "true" ? describe : describe.skip;
+
+externalDescribe("User Media Controller", () => {
      describe("GET /api/v1/customers/profile/fetch", () => {
           it(
                "should fetch customer profile successfully",

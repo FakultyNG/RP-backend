@@ -1,0 +1,44 @@
+name: Backend tests
+
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      NODE_ENV: test
+      MONGO_URL: mongodb://127.0.0.1:27017/reeplay_test
+      MONGO_DB_NAME: reeplay_test
+      JWT_SECRET: ci-test-only-secret
+      JWT_SECRET_REFRESH_TOKEN: ci-test-only-refresh-secret
+      GUEST_TOKEN: ci-test-only-guest-token
+      ENABLE_CRON_JOBS: "false"
+      ENABLE_MEDIA_SERVER: "false"
+      ENABLE_FIREBASE: "false"
+      ALLOW_AWS_IN_DEVELOPMENT: "false"
+      ALLOW_EXTERNAL_PAYMENTS: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test

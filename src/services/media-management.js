@@ -9,6 +9,13 @@ const {
 } = require("@aws-sdk/client-s3");
 const { createTranscodingJob } = require("./media-access");
 
+const getBucketName = () => {
+     if (!process.env.S3_BUCKET) {
+          throw new Error("S3_BUCKET is required for media operations");
+     }
+     return process.env.S3_BUCKET;
+};
+
 function getFileExtension(filename) {
      const parts = filename.split(".");
      return parts.length > 1 ? parts.pop() : "";
@@ -27,7 +34,7 @@ exports.uploadLargeVideos = async (req, fileHandle, fileKey, expire, res) => {
      if (!req.files[fileHandle]) return false;
      let file = { ...req.files[fileHandle] };
 
-     const bucketName = "reeplay";
+     const bucketName = getBucketName();
      const key = fileKey
           ? `videos/${fileKey}`
           : file
@@ -130,8 +137,8 @@ exports.uploadLargeVideos = async (req, fileHandle, fileKey, expire, res) => {
           );
           res.end();
 
-          const filePath = `s3://reeplay/${key}`;
-          const transPath = `s3://reeplay/transcode/${key.split("/").slice(1).join("/")}`;
+          const filePath = `s3://${bucketName}/${key}`;
+          const transPath = `s3://${bucketName}/transcode/${key.split("/").slice(1).join("/")}`;
 
           await createTranscodingJob(filePath, transPath);
 
@@ -161,7 +168,7 @@ exports.uploadShortVideos = async (req, fileHandle, expire, fileKey) => {
      if (!req.files[fileHandle]) return false;
      let file = { ...req.files[fileHandle] };
 
-     const bucketName = "reeplay";
+     const bucketName = getBucketName();
      const key = fileKey
           ? `videos/${fileKey}`
           : file
@@ -180,8 +187,8 @@ exports.uploadShortVideos = async (req, fileHandle, expire, fileKey) => {
 
           const uploadResult = await s3Client.send(putObjectCommand);
 
-          const filePath = `s3://reeplay/${key}`;
-          const transPath = `s3://reeplay/transcode/${key.split("/").slice(1).join("/")}`;
+          const filePath = `s3://${bucketName}/${key}`;
+          const transPath = `s3://${bucketName}/transcode/${key.split("/").slice(1).join("/")}`;
 
           await createTranscodingJob(filePath, transPath);
 
@@ -201,7 +208,7 @@ exports.uploadSubtitle = async (req, fileHandle, fileKey) => {
      if (!req.files[fileHandle]) return false;
      let file = { ...req.files[fileHandle] };
 
-     const bucketName = "reeplay";
+     const bucketName = getBucketName();
      const key = fileKey
           ? `subtitles/${fileKey}`
           : file
@@ -235,7 +242,7 @@ exports.uploadImage = async (req, fileHandle, fileKey) => {
      if (!req.files[fileHandle]) return false;
      let file = { ...req.files[fileHandle] };
 
-     const bucketName = "reeplay";
+     const bucketName = getBucketName();
      const key = fileKey
           ? `photos/${fileKey + "." + getFileExtension(file.name)}`
           : file
@@ -269,7 +276,7 @@ exports.uploadImage = async (req, fileHandle, fileKey) => {
 exports.deletePhoto = async (payload) => {
      try {
           const params = {
-               Bucket: payload.Bucket || "reeplay",
+               Bucket: payload.Bucket || getBucketName(),
                Key: payload?.Key,
           };
 

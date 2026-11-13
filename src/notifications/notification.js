@@ -1,9 +1,10 @@
-const admin = require("../firebase/firebase");
+const { getFirebaseAdmin } = require("../firebase/firebase");
 const NotificationsModel = require("../models/notifications.model");
 const UserDeviceModel = require("../models/userDevice.model");
 
 exports.sendPushNotification = async (title, body, notificationData = {}) => {
      try {
+          const admin = getFirebaseAdmin();
           // Get all user devices
           const userDevices = await UserDeviceModel.find({
                user_id: notificationData.user_id,
@@ -55,8 +56,12 @@ exports.sendPushNotification = async (title, body, notificationData = {}) => {
 };
 
 exports.sendPush = async () => {
+     const admin = getFirebaseAdmin();
+     if (!process.env.FIREBASE_TEST_DEVICE_TOKEN) {
+          throw new Error("FIREBASE_TEST_DEVICE_TOKEN is required");
+     }
      const message = {
-          token: "fu8nrVNLQs2euLjEI7uDY3:APA91bE9UhxVjLGCVHz7kfOl85t7ZRTc8Kz0BQm_2-0USryPrmnI3mpmKauwOtgDa9Wtp7toS6vRLNf0Wfv4cypzNnEX5uyZo8zjPNixKzaYgdLTRJyNlD3OwDqu8rztqqFxMRLhFzAG",
+          token: process.env.FIREBASE_TEST_DEVICE_TOKEN,
           notification: {
                title: "Your Notification Title",
                body: "Your Notification Body",

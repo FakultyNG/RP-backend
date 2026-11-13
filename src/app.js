@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("./config/load-env");
 const express = require("express");
 const fileUpload = require("express-fileupload");
 const mongoose = require("mongoose");
@@ -6,31 +6,8 @@ const cors = require("cors");
 const path = require("path");
 
 const routes = require("./routes/index");
-const { connect } = require("./livestream/nms");
-const {
-     sendPushNotification,
-     sendPush,
-} = require("./notifications/notification");
 
 const app = express();
-
-const db_url = process.env.MONGO_URL;
-
-const connectDB = async () => {
-     try {
-          await mongoose.connect(db_url, {
-               dbName: "reeplayDB",
-          });
-
-          console.log("DB connected");
-     } catch (error) {
-          console.log(`Error in Connection: ${error.message}`);
-     }
-};
-
-connectDB();
-
-connect.register(app);
 
 app.use(
      express.json({
@@ -64,6 +41,18 @@ app.get("/", (req, res) => {
      res.json({
           status: 200,
           message: "REEPLAY API BASE_URL",
+     });
+});
+
+app.get("/health", (req, res) => {
+     res.json({ status: "ok", service: "reeplay-backend" });
+});
+
+app.get("/ready", (req, res) => {
+     const ready = mongoose.connection.readyState === 1;
+     res.status(ready ? 200 : 503).json({
+          status: ready ? "ready" : "not_ready",
+          database: ready ? "connected" : "disconnected",
      });
 });
 

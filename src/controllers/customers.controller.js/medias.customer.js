@@ -76,7 +76,7 @@ exports.vodStream = async (req, res) => {
           const { bucket, key } = req.body;
           const user = req.user;
 
-          const transPath = `s3://reeplay/transcode/${key.split("/").slice(1).join("/")}`;
+          const transPath = `s3://${process.env.S3_BUCKET}/transcode/${key.split("/").slice(1).join("/")}`;
 
           const params = {
                Bucket: bucket,
@@ -93,7 +93,7 @@ exports.vodStream = async (req, res) => {
                // const url = await getVideoUrl(bucket, key);
                // console.log(url);
 
-               const filePath = `s3://reeplay/${key}`;
+               const filePath = `s3://${process.env.S3_BUCKET}/${key}`;
 
                await createTranscodingJob(filePath, transPath);
 

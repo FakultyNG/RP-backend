@@ -1,16 +1,13 @@
+require("./config/load-env");
 const http = require("http");
 const app = require("./app");
 const { Server } = require("socket.io");
 const socketChat = require("./socket/socketEvents");
-const {
-     getActiveSessions,
-     autoRenewSubscription,
-     activateLiveStream,
-     deActivateLiveStream,
-     expireFeaturedContents,
-} = require("./cron");
+const { assertSafeEnvironment, enabled } = require("./config/environment");
+const { connectDatabase, disconnectDatabase } = require("./config/database");
 
 const PORT = process.env.PORT || 8000;
+const HOST = process.env.HOST || "0.0.0.0";
 
 const server = http.createServer(app);
 
@@ -23,19 +20,36 @@ global.io = io;
 
 socketChat(io);
 
-server.listen(PORT, async () => {
-     console.log(
-          `Node Server Listening on port: ${PORT} >>>>>> [http://localhost:${PORT}]`
-     );
-     // console.log(new Date("2024-09-20T15:00:00.000Z").getTime());
-     // console.log(new Date("2024-09-25T15:00:00.000Z").getTime());
+const start = async () => {
+     assertSafeEnvironment();
+     await connectDatabase();
 
-     // console.log(new Date(), new Date("2024-09-26T06:39:17.257+00:00"));
+     if (enabled("ENABLE_MEDIA_SERVER", process.env.NODE_ENV === "production")) {
+          const { connect } = require("./livestream/nms");
+          await connect.register();
+     }
 
-     //Cron Jobs
-     getActiveSessions();
-     autoRenewSubscription(); //1725572611210
-     activateLiveStream(); //1725572685813
-     deActivateLiveStream();
-     expireFeaturedContents();
+     if (enabled("ENABLE_CRON_JOBS", process.env.NODE_ENV === "production")) {
+          require("./cron");
+     }
+
+     server.listen(PORT, HOST, () => {
+          console.log(`Node Server listening at http://${HOST}:${PORT}`);
+     });
+};
+
+const shutdown = async (signal) => {
+     console.log(`${signal} received; shutting down`);
+     server.close(async () => {
+          await disconnectDatabase();
+          process.exit(0);
+     });
+};
+
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+
+start().catch((error) => {
+     console.error(`Startup failed: ${error.message}`);
+     process.exit(1);
 });

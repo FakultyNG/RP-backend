@@ -1,5 +1,10 @@
 # Reeplay Backend Service
 
+> Local development has been isolated from production. Start with
+> [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md) and review the verified
+> [environment audit](docs/LOCAL_ENVIRONMENT_AUDIT.md). This repository uses
+> MongoDB/Mongoose, not PostgreSQL.
+
 A robust Node.js backend service for video streaming and media management, built with Express.js and MongoDB.
 
 ## 🚀 Features
