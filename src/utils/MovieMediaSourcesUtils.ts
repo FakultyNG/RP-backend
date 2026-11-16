@@ -35,6 +35,7 @@ export class MovieMediaSourcesUtils {
       Object.assign(episode, {
         video: this._getMovieVideoSource(episode, 'vid', quality),
         trailer: this._getMovieVideoSource(episode, 'trailer', quality),
+        videoUploadId: episode.videoUpload?._id,
         trailerUpload: undefined,
         videoUpload: undefined,
         trailerLink: undefined,

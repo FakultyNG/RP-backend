@@ -68,8 +68,8 @@ export interface Episode {
   description: string
   trailerLink: null | string
   videoLink: null | string
-  videoUpload: null | Pick<TrailerVideoUpload, 'resolutions'>
-  trailerUpload: null | Pick<TrailerVideoUpload, 'resolutions'>
+  videoUpload: null | Pick<TrailerVideoUpload, '_id' | 'resolutions'>
+  trailerUpload: null | Pick<TrailerVideoUpload, '_id' | 'resolutions'>
   createdAt: string
   updatedAt: string
   averageRating: number

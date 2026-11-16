@@ -36,6 +36,10 @@ import { ViewService } from '../../services/core/ViewService'
 import { AutoFeaturedService } from '../../services/core/AutoFeaturedService'
 import { isYouTubeUrl } from '../../utils/youtube'
 import { PersonalizedContentService } from '../../services/core/PersonalizedContentService'
+import { VideoUploadModel } from '../../models/videoupload.model'
+import { EpisodeModel } from '../../models/episodes.model'
+import { SeasonModel } from '../../models/seasons.model'
+import { MediaAccess } from '../../services/media-access'
 
 export type PaymentHistoryCaller = {
   caller: 'Admin' | 'Others'
@@ -425,7 +429,9 @@ export class SharedController extends UploadMediaUtils {
           throw new OperationalError('Not Found', 404)
         }
 
-        source = VidUploadUtils.getResSourceUrl(vodUploadDocument, quality)
+        source = req.query.download === 'true'
+          ? MediaAccess.getSignedVideoURL(vodUploadDocument.key)
+          : VidUploadUtils.getResSourceUrl(vodUploadDocument, quality)
         break
 
       case 'trailer':
@@ -457,6 +463,45 @@ export class SharedController extends UploadMediaUtils {
     sendResponse({
       res,
       data: { source },
+    })
+  })
+
+  static fetchDownloadSource = Catch.async(async (req, res) => {
+    const user = GetDefined.loggedInUser(req.user)
+    const upload = await VideoUploadModel.findById(req.params.videoUploadId)
+    if (!upload || (upload.parentType !== 'vod' && upload.parentType !== 'episode')) {
+      throw new OperationalError('Download source not found', 404)
+    }
+
+    let video = upload.parentType === 'vod'
+      ? await VideoModel.findById(upload.parentId)
+      : null
+
+    if (upload.parentType === 'episode') {
+      const episode = await EpisodeModel.findById(upload.parentId).select('season')
+      const season = episode
+        ? await SeasonModel.findById(episode.season).select('video')
+        : null
+      video = season ? await VideoModel.findById(season.video) : null
+    }
+
+    if (!video) throw new OperationalError('Download source not found', 404)
+    assertGuestCanView(user, video.vidClass)
+
+    if (video.vidClass !== 'free') {
+      const access = await PaymentService.checkHasValidContentPayment({
+        contentId: video._id.toString(),
+        contentType: 'vod',
+        currentUserId: user._id,
+      })
+      if (!access.canView) {
+        throw new OperationalError('Successful wallet payment required to download this content', 403)
+      }
+    }
+
+    sendResponse({
+      res,
+      data: { source: MediaAccess.getSignedVideoURL(upload.key) },
     })
   })
 

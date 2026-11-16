@@ -33,6 +33,7 @@ export class SharedRoutes {
     vodsRouter.get('/seasons/:vidId', AdminUploadController.fetchSeasonsAndEpisodes)
     vodsRouter.get('/similar-by-genre/:genreId', SharedController.getSimilarByGenreId)
     vodsRouter.get('/video-source/:videoId/:type', SharedController.fetchVideoSource)
+    vodsRouter.get('/download-source/:videoUploadId', SharedController.fetchDownloadSource)
 
     vodsRouter.get('/vod-meta/:vodId', SharedController.getVodMetaBy)
     vodsRouter.get('/details/:vodId', SharedController.getVodDetailsById)
