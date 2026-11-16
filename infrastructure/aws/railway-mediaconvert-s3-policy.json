@@ -8,7 +8,7 @@
         "s3:GetObject",
         "s3:GetObjectVersion"
       ],
-      "Resource": "arn:aws:s3:::reeplay/*"
+      "Resource": "arn:aws:s3:::reeplay-railway-staging-637423435427/*"
     },
     {
       "Sid": "WriteRailwayHlsOutputs",
@@ -18,7 +18,7 @@
         "s3:GetObject",
         "s3:PutObject"
       ],
-      "Resource": "arn:aws:s3:::reeplay/railway-hls/*"
+      "Resource": "arn:aws:s3:::reeplay-railway-staging-637423435427/railway-hls/*"
     },
     {
       "Sid": "ReadReeplayBucketMetadata",
@@ -27,7 +27,7 @@
         "s3:GetBucketLocation",
         "s3:ListBucket"
       ],
-      "Resource": "arn:aws:s3:::reeplay",
+      "Resource": "arn:aws:s3:::reeplay-railway-staging-637423435427",
       "Condition": {
         "StringLike": {
           "s3:prefix": [

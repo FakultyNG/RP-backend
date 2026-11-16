@@ -104,8 +104,10 @@ const deleteVerifiedLegacyMp4s = async () => {
 
 export const migrateRailwayHls = async ({
   deleteLegacyMp4 = false,
+  limit,
 }: {
   deleteLegacyMp4?: boolean
+  limit?: number
 } = {}): Promise<MigrationSummary> => {
   const summary: MigrationSummary = {
     total: 0,
@@ -116,7 +118,9 @@ export const migrateRailwayHls = async ({
     legacyMp4Deleted: 0,
   }
 
-  const cursor = VideoUploadModel.find({ key: { $exists: true, $ne: '' } }).cursor()
+  let query = VideoUploadModel.find({ key: { $exists: true, $ne: '' } }).sort({ size: 1, _id: 1 })
+  if (limit && limit > 0) query = query.limit(limit)
+  const cursor = query.cursor()
 
   for await (const document of cursor) {
     summary.total += 1
@@ -150,8 +154,11 @@ if (require.main === module) {
   void (async () => {
     try {
       await connectMongoDB()
+      const limitArgument = process.argv.find(argument => argument.startsWith('--limit='))
+      const limit = limitArgument ? Number(limitArgument.split('=')[1]) : undefined
       const summary = await migrateRailwayHls({
         deleteLegacyMp4: process.argv.includes('--delete-legacy-mp4'),
+        limit: Number.isFinite(limit) ? limit : undefined,
       })
       console.log(JSON.stringify(summary, null, 2))
       await mongoose.connection.close()
