@@ -133,11 +133,27 @@ const deleteVerifiedLegacyMp4s = async () => {
   return deleted
 }
 
+const deleteAllLegacyMp4s = async () => {
+  if (process.env.ALLOW_DELETE_LEGACY_MP4 !== 'true') {
+    throw new Error('Refusing legacy MP4 deletion without ALLOW_DELETE_LEGACY_MP4=true.')
+  }
+
+  const legacyKeys = (await S3.listKeys('transcode/')).filter(
+    key => key.startsWith('transcode/') && key.toLowerCase().endsWith('.mp4'),
+  )
+  await S3.deleteObjects(legacyKeys)
+  return legacyKeys.length
+}
+
 export const migrateRailwayHls = async ({
   deleteLegacyMp4 = false,
+  deleteAllLegacyMp4 = false,
+  submitMissing = true,
   limit,
 }: {
   deleteLegacyMp4?: boolean
+  deleteAllLegacyMp4?: boolean
+  submitMissing?: boolean
   limit?: number
 } = {}): Promise<MigrationSummary> => {
   const summary: MigrationSummary = {
@@ -167,7 +183,9 @@ export const migrateRailwayHls = async ({
       continue
     }
 
-    if (await submitDocument(document)) {
+    if (!submitMissing) {
+      summary.failed += 1
+    } else if (await submitDocument(document)) {
       summary.submitted += 1
     } else {
       summary.failed += 1
@@ -176,6 +194,9 @@ export const migrateRailwayHls = async ({
 
   if (deleteLegacyMp4) {
     summary.legacyMp4Deleted = await deleteVerifiedLegacyMp4s()
+  }
+  if (deleteAllLegacyMp4) {
+    summary.legacyMp4Deleted = await deleteAllLegacyMp4s()
   }
 
   return summary
@@ -189,6 +210,8 @@ if (require.main === module) {
       const limit = limitArgument ? Number(limitArgument.split('=')[1]) : undefined
       const summary = await migrateRailwayHls({
         deleteLegacyMp4: process.argv.includes('--delete-legacy-mp4'),
+        deleteAllLegacyMp4: process.argv.includes('--delete-all-legacy-mp4'),
+        submitMissing: !process.argv.includes('--no-submit'),
         limit: Number.isFinite(limit) ? limit : undefined,
       })
       console.log(JSON.stringify(summary, null, 2))
