@@ -16,31 +16,41 @@ type MigrationSummary = {
 const expectedMasterKey = (document: VideoUpload) =>
   document.hlsKey || MediaConvert.getHlsMasterKey(document.key)
 
+const updateHlsFields = async (
+  document: VideoUpload,
+  fields: Partial<Pick<VideoUpload, 'hlsKey' | 'hlsStatus' | 'hlsJobId' | 'hlsError' | 'isTranscoded'>>,
+) => {
+  // Some production uploads predate the current parentType enum. Updating only
+  // the migration-owned fields avoids validating or rewriting that legacy data.
+  await VideoUploadModel.updateOne({ _id: document._id }, { $set: fields })
+  Object.assign(document, fields)
+}
+
 const syncDocumentStatus = async (document: VideoUpload) => {
   const hlsKey = expectedMasterKey(document)
 
   if (await S3.objectExists(hlsKey)) {
-    document.hlsKey = hlsKey
-    document.hlsStatus = 'ready'
-    document.hlsError = null
-    document.isTranscoded = true
-    await document.save()
+    await updateHlsFields(document, {
+      hlsKey,
+      hlsStatus: 'ready',
+      hlsError: null,
+      isTranscoded: true,
+    })
     return 'ready' as const
   }
 
   if (document.hlsJobId) {
     const job = await MediaConvert.getJob(document.hlsJobId)
     if (job?.Status === 'SUBMITTED' || job?.Status === 'PROGRESSING') {
-      document.hlsKey = hlsKey
-      document.hlsStatus = 'processing'
-      await document.save()
+      await updateHlsFields(document, { hlsKey, hlsStatus: 'processing' })
       return 'processing' as const
     }
 
     if (job?.Status === 'ERROR' || job?.Status === 'CANCELED') {
-      document.hlsStatus = 'failed'
-      document.hlsError = job.ErrorMessage ?? `MediaConvert job ${job.Status.toLowerCase()}`
-      await document.save()
+      await updateHlsFields(document, {
+        hlsStatus: 'failed',
+        hlsError: job.ErrorMessage ?? `MediaConvert job ${job.Status.toLowerCase()}`,
+      })
     }
   }
 
@@ -50,16 +60,18 @@ const syncDocumentStatus = async (document: VideoUpload) => {
 const submitDocument = async (document: VideoUpload) => {
   try {
     const job = await MediaConvert.transcode(document.key)
-    document.hlsKey = MediaConvert.getHlsMasterKey(document.key)
-    document.hlsJobId = job.Job?.Id ?? null
-    document.hlsStatus = 'processing'
-    document.hlsError = null
-    await document.save()
+    await updateHlsFields(document, {
+      hlsKey: MediaConvert.getHlsMasterKey(document.key),
+      hlsJobId: job.Job?.Id ?? null,
+      hlsStatus: 'processing',
+      hlsError: null,
+    })
     return true
   } catch (error: any) {
-    document.hlsStatus = 'failed'
-    document.hlsError = error?.message ?? 'Unable to submit Railway HLS job'
-    await document.save()
+    await updateHlsFields(document, {
+      hlsStatus: 'failed',
+      hlsError: error?.message ?? 'Unable to submit Railway HLS job',
+    })
     return false
   }
 }
