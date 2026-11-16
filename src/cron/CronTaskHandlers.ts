@@ -1,6 +1,7 @@
 import { LiveModel } from '../models/lives.model'
 import { VideoModel } from '../models/videos.model'
 import { S3 } from '../services/aws/s3'
+import { AutoFeaturedService } from '../services/core/AutoFeaturedService'
 import { fetchUntranscodedVideoUploadDocumentsGenerator } from '../generators/fetchUntranscodedVideoUploads'
 import { VideoUpload } from '../models/videoupload.model'
 import { EpisodeModel } from '../models/episodes.model'
@@ -16,6 +17,7 @@ import {
 } from '../generators/fetchUpcomingLiveEvents'
 import { Notification } from '../notifications/notification'
 import { formatTimeWithTimezone } from '../utils/date'
+import { LiveViewerPresenceModel } from '../models/liveViewerPresence.model'
 
 export class CronTaskHandlers {
   protected static checkTranscodedParentDocumentOrThrow = (
@@ -143,18 +145,30 @@ export class CronTaskHandlers {
             feat_expiry: { $exists: true },
           },
           {
-            feat_expiry: { $gte: dateNow },
+            feat_expiry: { $lte: dateNow },
           },
         ],
       }
 
-      await LiveModel.updateMany(filter, {
+      const expiryUpdate = {
         $set: { featured: false },
-      })
-      await VideoModel.updateMany(filter, { $set: { featured: false } })
+        $unset: { feat_expiry: 1, featuredSource: 1, featuredAt: 1, featuredScore: 1 },
+      }
+      await LiveModel.updateMany(filter, expiryUpdate)
+      await VideoModel.updateMany(filter, expiryUpdate)
+      await AutoFeaturedService.refreshIfDue()
     } catch (error: any) {
       console.log('Cron Error: expire featured content', error.message ?? error)
     }
+  }
+
+  static expireLiveEvents = async () => {
+    const now = new Date()
+    await LiveModel.updateMany(
+      { expiry: { $lte: now }, $or: [{ expired: false }, { active: true }] },
+      { $set: { expired: true, active: false, active_views: 0, endedAt: now } },
+    )
+    await LiveViewerPresenceModel.deleteMany({ updatedAt: { $lte: new Date(now.getTime() - 86400000) } })
   }
 
   static handleOneHourLiveEventPushReminder = async () => {
@@ -165,7 +179,7 @@ export class CronTaskHandlers {
     })
 
     for await (const liveDocuments of batchGenerator) {
-      liveDocuments.forEach(async liveDocument => {
+      await Promise.all(liveDocuments.map(async liveDocument => {
         const liveId = liveDocument._id.toString()
         try {
           Notification.sendTopicPushNotification(Notification.makeContentTopic(liveId, 'LIVE'), {
@@ -191,19 +205,19 @@ export class CronTaskHandlers {
             },
           })
         }
-      })
+      }))
     }
   }
 
   static handle24HourLiveEventPushReminder = async () => {
     console.log('handle24HourLiveEventPushReminder started')
 
-    const batchGenerator = liveEvents1hrReminderGenerator({
+    const batchGenerator = liveEvents24hReminderGenerator({
       batchSize: 20,
     })
 
     for await (const liveDocuments of batchGenerator) {
-      liveDocuments.forEach(async liveDocument => {
+      await Promise.all(liveDocuments.map(async liveDocument => {
         const liveId = liveDocument._id.toString()
         try {
           const message = `Are you set? Tomorrow ${liveDocument.title} goes LIVE by ${formatTimeWithTimezone(liveDocument.start)} on Reeplay`
@@ -231,7 +245,7 @@ export class CronTaskHandlers {
             },
           })
         }
-      })
+      }))
     }
   }
   static handle10MinutesLiveEventPushReminder = async () => {
@@ -242,7 +256,7 @@ export class CronTaskHandlers {
     })
 
     for await (const liveDocuments of batchGenerator) {
-      liveDocuments.forEach(async liveDocument => {
+      await Promise.all(liveDocuments.map(async liveDocument => {
         const liveId = liveDocument._id.toString()
 
         try {
@@ -269,7 +283,7 @@ export class CronTaskHandlers {
             },
           })
         }
-      })
+      }))
     }
   }
 }

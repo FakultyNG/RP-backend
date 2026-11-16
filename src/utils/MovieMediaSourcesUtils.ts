@@ -9,15 +9,15 @@ export class MovieMediaSourcesUtils {
     quality: VideoQuality,
   ) => {
     if (routine === 'vid') {
-      return vid.videoUpload
+      return vid.videoLink ?? (vid.videoUpload
         ? VidUploadUtils.getResSourceUrl(vid.videoUpload, quality)
-        : vid.videoLink
+        : undefined)
     }
 
     if (routine === 'trailer') {
-      return vid.trailerUpload
+      return vid.trailerLink ?? (vid.trailerUpload
         ? VidUploadUtils.getResSourceUrl(vid.trailerUpload, quality)
-        : vid.trailerLink
+        : undefined)
     }
   }
 
@@ -50,7 +50,10 @@ export class MovieMediaSourcesUtils {
   static resolveMediaSources = (videoDocuments: VodCardResponse[], quality: VideoQuality) =>
     videoDocuments.map(videoDocument =>
       Object.assign(videoDocument, {
-        video: this._getMovieVideoSource(videoDocument, 'vid', quality),
+        // Paid media is resolved only through the authenticated video-source endpoint.
+        video: videoDocument.vidClass === 'free'
+          ? this._getMovieVideoSource(videoDocument, 'vid', quality)
+          : undefined,
         trailer: this._getMovieVideoSource(videoDocument, 'trailer', quality),
 
         //

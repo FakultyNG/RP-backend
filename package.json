@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "reeplay mobile app, netflix and other similar apps compatible",
   "main": "src/index.js",
+  "engines": {
+    "node": ">=22 <23"
+  },
   "scripts": {
     "test": "jest",
     "lint": "eslint .",
@@ -10,8 +13,8 @@
     "prest": "nodemon --exec \"npm run format && node\" src/index.js",
     "dev": "cross-env NODE_ENV=development nodemon -e ts --watch src .env --exec \"tsc --incremental && node build/src/index.js\" || exit 1",
     "start": "cross-env NODE_ENV=production node build/src/index.js",
-    "prestart": "npm run build",
-    "build": "rimraf build && tsc"
+    "build": "rimraf build && tsc",
+    "docs:generate": "node scripts/generate-api-docs.mjs"
   },
   "keywords": [],
   "author": "",
@@ -42,10 +45,12 @@
     "morgan": "^1.10.0",
     "multer": "^2.0.1",
     "node-cron": "^3.0.3",
-    "nodemailer": "^7.0.3",
+    "nodemailer": "^10.5.0",
     "paystack-sdk": "^2.5.17",
     "rimraf": "^6.0.1",
-    "socket.io": "^4.7.5"
+    "sharp": "^0.34.5",
+    "socket.io": "^4.7.5",
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
@@ -62,10 +67,12 @@
     "@types/node-cron": "^3.0.11",
     "@types/node-media-server": "^2.3.7",
     "@types/nodemailer": "^6.4.17",
+    "@types/swagger-ui-express": "^4.1.8",
     "chai": "^5.1.1",
     "cross-env": "^7.0.3",
     "nodemon": "^3.1.0",
     "prettier": "^3.3.2",
+    "railway": "^3.17.0",
     "supertest": "^7.0.0",
     "typescript": "^5.7.2"
   }

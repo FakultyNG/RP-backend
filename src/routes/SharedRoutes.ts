@@ -34,6 +34,7 @@ export class SharedRoutes {
     vodsRouter.get('/video-source/:videoId/:type', SharedController.fetchVideoSource)
 
     vodsRouter.get('/vod-meta/:vodId', SharedController.getVodMetaBy)
+    vodsRouter.get('/details/:vodId', SharedController.getVodDetailsById)
     vodsRouter.get('/default-library', SharedController.getAllVods)
 
     vodsRouter.get(

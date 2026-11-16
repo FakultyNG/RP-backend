@@ -15,7 +15,7 @@ const schema = new Schema(
       type: String,
       lowercase: true,
       trim: true,
-      required: true,
+      default: '',
     },
 
     email: {
@@ -30,13 +30,11 @@ const schema = new Schema(
     country_code: {
       type: String,
       trim: true,
-      required: true,
     },
 
     mobile: {
       type: String,
       trim: true,
-      required: true,
     },
 
     password: {
@@ -164,8 +162,6 @@ schema.pre('validate', function (next) {
 
   next()
 })
-
-schema.index({ country_code: 1, mobile: 1 }, { unique: true })
 
 export const UserModel = model('users', schema)
 

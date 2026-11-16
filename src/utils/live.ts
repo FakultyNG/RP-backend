@@ -15,8 +15,7 @@ export const checkedValidLivestreamByStreamKey = async (streamKey: string) => {
   const now = new Date()
 
   const liveDocument = await LiveModel.findOne({ stream_key: streamKey })
-    .select('expiry title coverPhoto')
-    .lean()
+    .select('start expiry title coverPhoto active')
 
   if (liveDocument == null) {
     throw new OperationalError(`Stream key: ${streamKey} is invalid`, 404)
@@ -24,6 +23,11 @@ export const checkedValidLivestreamByStreamKey = async (streamKey: string) => {
 
   if (liveDocument.expiry < now) {
     throw new OperationalError(`Stream key: ${streamKey} belongs to an expired event`, 400)
+  }
+
+  const earlyPublishWindowMs = 15 * 60 * 1000
+  if (liveDocument.start.getTime() - now.getTime() > earlyPublishWindowMs) {
+    throw new OperationalError('This event can only be published within 15 minutes of its start', 400)
   }
 
   return liveDocument
@@ -39,6 +43,16 @@ export const handleRTMPStreamPublish = async (streamKey: unknown) => {
   const image =
     liveDocument.coverPhoto && `${env.CDN_IMAGES_BASE_URL}/${liveDocument.coverPhoto.Key}`
 
+  await LiveModel.findByIdAndUpdate(liveDocument._id, {
+    $set: {
+      active: true,
+      expired: false,
+      upcoming: false,
+      publishedAt: new Date(),
+      endedAt: null,
+    },
+  })
+
   Notification.sendTopicPushNotification(Notification.makeContentTopic(liveId, 'LIVE'), {
     title: 'Update',
     type: 'LIVE_EVENT_REMINDER',
@@ -46,6 +60,32 @@ export const handleRTMPStreamPublish = async (streamKey: unknown) => {
     image,
     metadata: { liveId },
   })
+}
+
+export const handleRTMPStreamPublishDone = async (streamKey: unknown) => {
+  if (typeof streamKey !== 'string') {
+    throw new OperationalError('Expected a stream key', 400)
+  }
+
+  const now = new Date()
+  const liveDocument = await LiveModel.findOneAndUpdate(
+    { stream_key: streamKey },
+    [
+      {
+        $set: {
+          active: false,
+          active_views: 0,
+          endedAt: now,
+          expired: { $lte: ['$expiry', now] },
+        },
+      },
+    ],
+    { new: true },
+  )
+
+  if (liveDocument == null) {
+    throw new OperationalError(`Stream key: ${streamKey} is invalid`, 404)
+  }
 }
 
 export const getUniqueStreamKey = async (triesCount = 1): Promise<string> => {

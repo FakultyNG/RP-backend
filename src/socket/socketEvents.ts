@@ -33,6 +33,7 @@ export const socketChat = async (io: Server) => {
           userDocument,
           liveId,
           membership: 'JOIN',
+          connectionId: socket.id,
         })
 
         socket.join(liveId)
@@ -48,6 +49,7 @@ export const socketChat = async (io: Server) => {
               userDocument,
               liveId,
               membership: 'LEAVE',
+              connectionId: socket.id,
             })
 
             io.to(liveId).emit('leftRoom', {

@@ -2,6 +2,8 @@ import { SettingsModel } from '../../models/userSettings.model'
 import { VideoUploadModel } from '../../models/videoupload.model'
 import { LoggedInUser, MulterFile } from '../../types'
 import { OperationalError } from '../../utils/OperationalError'
+import { VideoModel } from '../../models/videos.model'
+import { assertGuestCanView, isGuestUser } from '../../utils/guestAccess'
 import { MediaAccess } from '../media-access'
 
 import { MediaManagement } from '../media-management'
@@ -43,6 +45,11 @@ export class MediaService {
       throw new OperationalError('Invalid video Upload Id', 404)
     }
 
+    if (vidUpload.parentId) {
+      const video = await VideoModel.findById(vidUpload.parentId).select('vidClass')
+      assertGuestCanView(currentUser, video?.vidClass)
+    }
+
     const response = {
       isTranscodedStream: vidUpload.isTranscoded,
       streamUrl: '',
@@ -53,12 +60,16 @@ export class MediaService {
       return response
     }
 
-    const [recentSetting] = await SettingsModel.find({ user_id: currentUser._id }).sort({
-      createdAt: -1,
-    })
+    const [recentSetting] = isGuestUser(currentUser)
+      ? []
+      : await SettingsModel.find({ user_id: currentUser._id }).sort({ createdAt: -1 })
 
     const vidQuality =
-      recentSetting && recentSetting.video_quality ? recentSetting.video_quality : '720p'
+      recentSetting && recentSetting.video_quality
+        ? recentSetting.video_quality
+        : isGuestUser(currentUser)
+          ? '480p'
+          : '720p'
 
     const vidUploadRes = vidUpload.resolutions.find(r => r.key.endsWith(`${vidQuality}.mp4`))
 
@@ -177,15 +188,21 @@ export class MediaService {
   }
 
   static getSubtitles = async (parentId: string, type: string) => {
-    const subtitles = await SubtitleModel.find({ video_id: parentId, parentType: type }).select(
-      'key language updatedAt',
-    )
+    if (type !== 'vod' && type !== 'episode') {
+      throw new OperationalError('subtitle type must be vod or episode', 400)
+    }
+
+    // `parentType` was added after subtitles already existed in production.
+    // Keep those legacy tracks visible while new uploads are stored explicitly.
+    const subtitles = await SubtitleModel.find({
+      video_id: parentId,
+      $or: [{ parentType: type }, { parentType: { $exists: false } }],
+    }).select('key bucket language parentType updatedAt')
 
     const subsWithSrcUrls = subtitles.map(subtitle => {
       return {
         ...subtitle.toObject(),
         src: MediaAccess.getImageAndSubtitleURL(subtitle.key),
-        key: undefined,
       }
     })
 

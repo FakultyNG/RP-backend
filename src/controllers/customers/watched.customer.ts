@@ -15,7 +15,10 @@ export class WatchedController {
     })
   })
   static deleteOneById = Catch.async(async (req, res) => {
-    await WatchedService.deleteById(req.params.id)
+    await WatchedService.deleteById(
+      req.params.id,
+      GetDefined.loggedInUser(req.user)._id.toString(),
+    )
 
     sendResponse({
       res,

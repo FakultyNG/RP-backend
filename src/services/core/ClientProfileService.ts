@@ -1,6 +1,7 @@
 import { MediaAccess } from '../../../src/services/media-access'
 import { PaymentModel } from '../../models/payments.model'
 import { LoggedInUser } from '../../types'
+import { getDefaultUserProfileImageUrl } from '../../utils/defaultUserProfileImage'
 import { hidePrivateProps } from '../../utils/hide'
 
 export class ClientProfileService {
@@ -11,7 +12,9 @@ export class ClientProfileService {
 
   static fetchClientProfile = async (currentUser: LoggedInUser) => {
     const profile = hidePrivateProps(currentUser)
-    const photo_url = !profile.photo ? null : MediaAccess.getImageAndSubtitleURL(profile.photo.Key)
+    const photo_url = !profile.photo
+      ? getDefaultUserProfileImageUrl()
+      : MediaAccess.getImageAndSubtitleURL(profile.photo.Key)
 
     profile.photo = undefined
 

@@ -10,7 +10,7 @@ const schema = new Schema(
 
     type: {
       type: String,
-      enum: ['general', 'movie_ad', 'web', 'mobile'],
+      enum: ['general', 'movie_ad', 'web', 'mobile', 'home_ad'],
       default: 'mobile',
       index: true,
     },
@@ -33,7 +33,7 @@ const schema = new Schema(
 
     videoUpload: {
       type: Schema.Types.ObjectId,
-      required: true,
+      required: false,
       index: true,
     },
 

@@ -7,6 +7,7 @@ import { MongoDBObjectId } from '../types/general'
 import env from '../env'
 import { MaybeSession } from '../utils/mongoDbSessionRunner'
 import { StringOrObjectId } from '../types'
+import { buildTitleRelevanceStage } from '../utils/SearchRelevance'
 
 export const toObjectId = (val: string) => new Types.ObjectId(val)
 
@@ -16,6 +17,7 @@ export type FetchVideosParams = {
   excludePreReleased?: boolean
   excludeExpired?: boolean
   populateCasts?: boolean
+  onlyReady?: boolean
   page: number
   limit: number
 }
@@ -92,8 +94,13 @@ export class VideoRepo {
 
   static addFeatured = (id: string, expiry: string) =>
     VideoModel.findByIdAndUpdate(id, {
-      featured: true,
-      feat_expiry: new Date(expiry),
+      $set: {
+        featured: true,
+        featuredSource: 'manual',
+        featuredAt: new Date(),
+        feat_expiry: new Date(expiry),
+      },
+      $unset: { featuredScore: 1, autoFeaturedBlockedUntil: 1 },
     })
 
   static totalVideosCountQuery = (filter: FilterQuery<Video> = {}) =>
@@ -249,15 +256,13 @@ export class VideoRepo {
         {
           $match: {
             releaseDate: { $gt: new Date() },
-
-            upcoming: true, // Unsure what these do
             active: true,
           },
         },
       ],
 
       excludePreReleased: false,
-      // sortStage: { $sort: { _id: -1 } },
+      sortStage: { $sort: { releaseDate: 1 } },
       page,
       limit,
     })
@@ -275,15 +280,21 @@ export class VideoRepo {
             ],
           },
         },
+        buildTitleRelevanceStage(textReg),
       ],
 
-      // sortStage: { $sort: { createdAt: -1 } },
+      sortStage: { $sort: { searchRelevance: 1, engagements: -1, createdAt: -1 } },
       page,
       limit,
     })
   }
 
-  static fetchSeasonsAndEpisodes = async (videoId: string, page: number, limit: number) => {
+  static fetchSeasonsAndEpisodes = async (
+    videoId: string,
+    page: number,
+    limit: number,
+    includeProcessing = false,
+  ) => {
     const aggr = await SeasonModel.aggregate([
       {
         $match: { video: toObjectId(videoId) },
@@ -300,12 +311,16 @@ export class VideoRepo {
           foreignField: 'season',
           as: 'episodes',
           pipeline: [
-            {
-              $match: {
-                isVideoReady: true,
-                isTrailerReady: true,
-              },
-            },
+            ...(includeProcessing
+              ? []
+              : [
+                  {
+                    $match: {
+                      isVideoReady: true,
+                      isTrailerReady: true,
+                    },
+                  },
+                ]),
 
             {
               $lookup: {
@@ -356,7 +371,11 @@ export class VideoRepo {
               },
             },
 
-            { $unset: ['isVideoReady', 'isTrailerReady', '__v'] },
+            {
+              $unset: includeProcessing
+                ? ['__v']
+                : ['isVideoReady', 'isTrailerReady', '__v'],
+            },
           ],
         },
       },
@@ -391,17 +410,20 @@ export class VideoRepo {
     excludePreReleased = true,
     excludeExpired = true,
     populateCasts = false,
+    onlyReady = true,
   }: FetchVideosParams) => {
     const aggr = VideoModel.aggregate([
       ...(excludePreReleased ? [this._excludePreleasedVODSMatchStage] : []),
       ...(excludeExpired ? [this._excludeExpiredVODSMatchSage] : []),
       ...prevStages,
 
-      {
-        $match: {
-          $or: [{ type: 'series' }, { $and: [{ isVideoReady: true }, { isTrailerReady: true }] }],
-        },
-      },
+      ...(onlyReady
+        ? [{
+          $match: {
+            $or: [{ type: 'series' }, { $and: [{ isVideoReady: true }, { isTrailerReady: true }] }],
+          },
+        } as PipelineStage.Match]
+        : []),
 
       {
         $set: {
@@ -484,7 +506,17 @@ export class VideoRepo {
         },
       },
 
-      { $unset: ['updatedAt', '__v', 'ratings', 'isTrailerReady', 'isVideoReady'] },
+      {
+        $unset: [
+          'updatedAt',
+          '__v',
+          'ratings',
+          'isTrailerReady',
+          'isVideoReady',
+          'featuredPriority',
+          'searchRelevance',
+        ],
+      },
 
       ...(populateCasts
         ? [
@@ -571,8 +603,46 @@ export class VideoRepo {
   }
 
   static fetchFeatured = async (page = 1, limit = 10) => {
+    const now = new Date()
     return await this.fetchVideoAggr({
-      prevStages: [{ $match: { featured: true } }],
+      prevStages: [
+        {
+          $match: {
+            featured: true,
+            $or: [
+              { feat_expiry: { $exists: false } },
+              { feat_expiry: { $gt: now } },
+            ],
+          },
+        },
+        {
+          $set: {
+            featuredPriority: { $cond: [{ $eq: ['$featuredSource', 'automatic'] }, 0, 1] },
+          },
+        },
+      ],
+      sortStage: { $sort: { featuredPriority: -1, featuredScore: -1, engagements: -1 } },
+      page,
+      limit,
+    })
+  }
+
+  static adminFetchFeatured = async (page = 1, limit = 50) => {
+    const now = new Date()
+    return await this.fetchVideoAggr({
+      prevStages: [{
+        $match: {
+          featured: true,
+          $or: [
+            { feat_expiry: { $exists: false } },
+            { feat_expiry: { $gt: now } },
+          ],
+        },
+      }],
+      sortStage: { $sort: { feat_expiry: -1, _id: -1 } },
+      excludePreReleased: false,
+      excludeExpired: false,
+      onlyReady: false,
       page,
       limit,
     })

@@ -1,22 +1,30 @@
-<div style="max-width: 600px; margin: auto; font-family: Arial, sans-serif; background-color: #ffffff; border: 1px solid #e0e0e0; padding: 20px;">
-    <div style="text-align: center; padding: 20px 0;">
-        <img src="https://api.reeplay.app/static/images/success.png" alt="Success" style="width: 100px;">
-    </div>
-    <div style="background-color: #28a745; color: #ffffff; padding: 15px 20px; border-radius: 5px 5px 0 0;">
-        <h2 style="margin: 0;">Auto Renew Subscription Activated</h2>
-    </div>
-    <div style="padding: 20px; color: #333333;">
-        <p>Hello Dear, <strong><%= name %></strong>!</p>
-        <p>
-            We are pleased to inform you that your subscription has been successfully renewed and auto-renewal has been activated from your <strong><%= pin %></strong>.
-        </p>
-        <p>
-            Feel free to navigate through our app, watch movies and series, and stream live events.
-        </p>
-        <p>We appreciate you choosing REEPLAY. Thank you!</p>
-    </div>
-    <div style="background-color: #f2f2f2; padding: 10px 20px; text-align: center; border-radius: 0 0 5px 5px;">
-        <p>Contact us at <a href="mailto:support@reeplay.app" style="color: #28a745;">support@reeplay.app</a></p>
-        <p style="color: #888888;">&copy; 2024 REEPLAY. All rights reserved.</p>
-    </div>
-</div>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Your Reeplay subscription was renewed</title>
+    <style>
+      body{margin:0;padding:0;background:#0b0d12;color:#16181d;font-family:Arial,Helvetica,sans-serif;-webkit-text-size-adjust:100%}table{border-collapse:collapse}.shell{width:100%;background:#0b0d12}.wrap{width:100%;max-width:600px}.card{background:#fffaf7;border:1px solid #292c33;border-radius:20px;overflow:hidden}.pad{padding:44px 48px}.status{width:52px;height:52px;border-radius:50%;background:#e7f5ec;color:#227a48;font-size:27px;line-height:52px;text-align:center;font-weight:700}.eyebrow{margin:24px 0 12px;color:#277d4d;font-size:12px;line-height:18px;font-weight:700;letter-spacing:2px}h1{margin:0 0 18px;color:#111318;font-size:34px;line-height:40px;letter-spacing:-1px}p{margin:0 0 18px;color:#555a64;font-size:16px;line-height:26px}.detail{margin-top:26px;padding:18px 20px;background:#f4eeea;border:1px solid #e6ddd8;border-radius:14px}.detail-label{color:#767b84;font-size:11px;line-height:17px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase}.detail-value{margin-top:4px;color:#252830;font-size:15px;line-height:23px;font-weight:700}.footer{padding:26px 34px 34px;text-align:center}.footer p{margin:0 0 7px;color:#9297a1;font-size:12px;line-height:18px}a{color:#ff4455;text-decoration:none}@media only screen and (max-width:620px){.outer{padding:18px 12px!important}.pad{padding:34px 24px!important}h1{font-size:29px!important;line-height:35px!important}}
+      .shell, .wrap { table-layout: fixed; }
+      .wrap { width: 94% !important; }
+      .outer { padding-left: 0 !important; padding-right: 0 !important; }
+      p { overflow-wrap: break-word; }
+    </style>
+  </head>
+  <body>
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">You’re all set—your Reeplay subscription has been renewed.</div>
+    <table role="presentation" class="shell" width="100%"><tr><td class="outer" align="center" style="padding:36px 16px;"><table role="presentation" class="wrap" width="100%">
+      <tr><td class="card"><div class="pad">
+        <div class="status">&#10003;</div>
+        <p class="eyebrow">RENEWAL CONFIRMED</p>
+        <h1>You’re all set.</h1>
+        <p>Hi <strong style="color:#252830;"><%= name %></strong>, your Reeplay subscription renewed successfully. Your access continues without interruption, so you can jump straight back into what you love.</p>
+        <div class="detail"><div class="detail-label">Payment source</div><div class="detail-value"><%= pin %></div></div>
+        <p style="margin-top:24px;margin-bottom:0;">Thanks for staying with Reeplay. Enjoy the show.</p>
+      </div></td></tr>
+      <tr><td class="footer"><p>Questions about your subscription? <a href="mailto:support@reeplay.app">We’re here to help</a></p><p>&copy; <%= footerYear %> Reeplay. Made for moments worth watching.</p></td></tr>
+    </table></td></tr></table>
+  </body>
+</html>

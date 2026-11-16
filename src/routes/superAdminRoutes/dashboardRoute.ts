@@ -1,11 +1,13 @@
 import { Router } from 'express'
 import { AdminDashboardController } from '../../controllers/admins/dashboard.admin'
+import { AdminAnalyticsController } from '../../controllers/admins/analytics.admin'
 
 export const superAdminDashboardRouter = Router()
 
 superAdminDashboardRouter.get('/profile/fetch', AdminDashboardController.currentAdminProfile)
 superAdminDashboardRouter.put('/profile/edit', AdminDashboardController.editAdminProfile)
 superAdminDashboardRouter.get('/topvideosbytype', AdminDashboardController.fetchVideosByType)
+superAdminDashboardRouter.get('/analytics', AdminAnalyticsController.overview)
 
 superAdminDashboardRouter.get(
   '/fetchbalanceandusers',

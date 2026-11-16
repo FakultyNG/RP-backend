@@ -1,10 +1,12 @@
 import { AdminUsersService } from '../../services/core/AdminUsersService'
 import { Catch } from '../../utils/Catch'
+import { GetDefined } from '../../utils/GetDefined'
 import { sendResponse } from '../../utils/responder'
 
 export class AdminUsersController {
-  static sendMainPushNotification = Catch.async(async ({ body, file }, res) => {
+  static sendMainPushNotification = Catch.async(async ({ body, file, user }, res) => {
     await AdminUsersService.sendAdminMainTopicPushNotification(
+      GetDefined.loggedInUser(user),
       {
         ...body,
         metadata: typeof body.metadata === 'string' ? JSON.parse(body.metadata) : {},
@@ -16,7 +18,7 @@ export class AdminUsersController {
     sendResponse({
       res,
       data: null,
-      message: 'sent',
+      message: 'Notification broadcast sent',
     })
   })
 

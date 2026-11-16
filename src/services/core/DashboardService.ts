@@ -125,7 +125,7 @@ export class DashboardService {
       totalMovieSeries,
       totalMusicVideos,
       totalActiveEvents,
-      totalContents: totalVideos + totalActiveEvents,
+      totalContents: totalVideos,
     }
   }
 }

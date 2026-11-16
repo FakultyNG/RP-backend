@@ -129,6 +129,15 @@ const schema = new Schema(
       default: false,
     },
 
+    featuredSource: {
+      type: String,
+      enum: ['manual', 'automatic'],
+    },
+
+    featuredAt: Date,
+    featuredScore: Number,
+    autoFeaturedBlockedUntil: Date,
+
     upcoming: {
       type: Boolean,
       default: false,
@@ -145,7 +154,7 @@ const schema = new Schema(
       default: [],
     },
 
-    featExpiry: {
+    feat_expiry: {
       type: Date,
     },
 
@@ -199,6 +208,10 @@ const schema = new Schema(
 )
 
 schema.pre('save', function (next) {
+  if (this.releaseDate && this.releaseDate.getTime() > Date.now()) {
+    this.upcoming = true
+  }
+
   if (this.isNew == false) return next()
 
   this.isVideoReady = typeof this.videoLink === 'string' || false
@@ -212,6 +225,7 @@ schema.pre('save', function (next) {
 })
 
 schema.index({ engagements: -1 })
+schema.index({ featured: 1, featuredSource: 1, feat_expiry: 1 })
 schema.index({ isVideoReady: 1, isTrailerReady: 1 }, { name: '_videosReady' })
 schema.index({ expiryDate: 1, upcoming: 1 }, { name: '_upcoming' })
 schema.index({ type: 1, title: 1 }, { unique: true, name: '_uniqueTitlePerType' })

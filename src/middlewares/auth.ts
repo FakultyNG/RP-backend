@@ -5,6 +5,7 @@ import { LoggedInUser } from '../types'
 import { Catch } from '../utils/Catch'
 import { TokenManager } from '../utils/jwt'
 import { OperationalError } from '../utils/OperationalError'
+import { PlatformSettingsService } from '../services/core/PlatformSettingsService'
 
 export type AuthHeaderKey = 'superadmin-auth' | 'customer-auth' | 'clients-auth' | 'admin-auth'
 
@@ -55,10 +56,15 @@ export class AuthMiddleware {
       }
 
       if (token === env.GUEST_TOKEN) {
+        if (!(await PlatformSettingsService.getGuestAccess())) {
+          throw new OperationalError('Guest access is disabled. Please log in.', 403)
+        }
+
         req.user = {
           first_name: 'guest',
           last_name: 'user',
           role: 'guest',
+          videoQuality: '480p',
         } as unknown as LoggedInUser
         return next()
       }

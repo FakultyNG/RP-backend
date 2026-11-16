@@ -25,6 +25,18 @@ export const addEpisodeSchema = Joi.object({
   .xor('trailerLink', 'trailer')
   .xor('video', 'videoLink')
 
+export const editEpisodeSchema = Joi.object({
+  title: STRING_SCHEMA,
+  description: Joi.string().allow(''),
+  videoLink: STRING_SCHEMA,
+  trailerLink: STRING_SCHEMA,
+  video: Joi.object(),
+  trailer: Joi.object(),
+})
+  .oxor('trailerLink', 'trailer')
+  .oxor('video', 'videoLink')
+  .or('title', 'description', 'videoLink', 'trailerLink', 'video', 'trailer')
+
 export const addMovieOrSkitSchema = Joi.object({
   title: STRING_SCHEMA.required(),
   pg: STRING_SCHEMA.required(),
@@ -192,7 +204,7 @@ export const editVideoSchema = Joi.object({
 
 export const addSubtitleSchema = Joi.object({
   parentId: MONGO_DB_OBJECT_ID_SCHEMA.required(),
-  parentType: STRING_SCHEMA.valid('vod', 'episode', 'series').required(),
+  parentType: STRING_SCHEMA.valid('vod', 'episode').required(),
   language: STRING_SCHEMA.required(),
   subtitle: Joi.object().required(),
 })
@@ -206,6 +218,7 @@ export const getPhotoURLSchema = {
 
 export const addLiveSchema = Joi.object({
   clientId: MONGO_DB_OBJECT_ID_SCHEMA.required(),
+  creatorType: STRING_SCHEMA.valid('admin', 'client').required(),
   title: STRING_SCHEMA.required(),
   subTitle: STRING_SCHEMA.required(),
   pg: STRING_SCHEMA.required(),
@@ -395,8 +408,8 @@ export const createAdSchema = Joi.object({
 
 export const upcomingAllGetSchema = {
   query: Joi.object({
-    page: Joi.number(),
-    limit: Joi.number(),
+    page: Joi.number().integer().min(1),
+    limit: Joi.number().integer().min(1).max(100),
   }),
 }
 
@@ -418,3 +431,9 @@ export const sendPushNotificationSchema = {
     metadata: Joi.alternatives().try(Joi.string(), Joi.object()),
   }),
 }
+
+export const createHomeAdSchema = Joi.object({
+  title: STRING_SCHEMA.required(),
+  link: Joi.string().uri({ scheme: ['http', 'https'] }).required(),
+  imageFile: Joi.object().required(),
+})

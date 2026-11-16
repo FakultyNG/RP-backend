@@ -10,20 +10,20 @@ interface UserNotification extends Omit<UserNotificationSchema, 'adminNotificati
   adminNotification: AdminNotificationSchema & { _id: MongoDBObjectId }
 }
 
-interface FetchUnseenUserNotificationsParams {
+interface FetchUserNotificationsParams {
   userId: MongoDBObjectId
   skip: number
   limit: number
 }
 
 export class NotificationRepo {
-  static fetchUnSeenUserNotifications = ({
+  static fetchUserNotifications = ({
     userId,
     skip,
     limit,
-  }: FetchUnseenUserNotificationsParams) => {
+  }: FetchUserNotificationsParams) => {
     const res = UserNotificationModel.aggregate([
-      { $match: { user: userId, hasSeen: false } },
+      { $match: { user: userId } },
 
       {
         $lookup: {
@@ -36,6 +36,7 @@ export class NotificationRepo {
 
       { $match: { 'adminNotification.0': { $exists: true } } },
       { $set: { adminNotification: { $first: '$adminNotification' } } },
+      { $sort: { createdAt: -1 } },
       { $skip: skip },
       { $limit: limit },
     ])

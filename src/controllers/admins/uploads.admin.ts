@@ -1,13 +1,15 @@
 import { validate } from '../../middlewares/requestValidator'
-import { videoTypes } from '../../models/videos.model'
+import { VideoModel, videoTypes } from '../../models/videos.model'
 import { AdminUploadService } from '../../services/core/AdminUploadService'
+import { PaymentService } from '../../services/core/PaymentService'
 
 import { Catch } from '../../utils/Catch'
 import { GetDefined } from '../../utils/GetDefined'
 import { OperationalError } from '../../utils/OperationalError'
 import { sendResponse } from '../../utils/responder'
 import { AllVideoTypes, MovieData, UploadMediaUtils } from '../../utils/UploadMediaUtils'
-import { addEpisodeSchema, editVideoSchema } from '../../validations/admin'
+import { addEpisodeSchema, editEpisodeSchema, editVideoSchema } from '../../validations/admin'
+import { isGuestUser } from '../../utils/guestAccess'
 
 export class AdminUploadController {
   private static _validateVideoType = (type: string) => {
@@ -129,6 +131,43 @@ export class AdminUploadController {
     })
   })
 
+  static editEpisode = Catch.async(async (req, res) => {
+    if (req.body.data == null || typeof req.body.data !== 'string') {
+      throw new OperationalError(
+        'formData.data is required and must be a JSON serialized string',
+        400,
+      )
+    }
+
+    const data = { ...JSON.parse(req.body.data) }
+    const files = UploadMediaUtils.checkFiles(req.files)
+    Object.assign(data, {
+      trailer: files.trailer?.[0],
+      video: files.video?.[0],
+    })
+    validate(editEpisodeSchema, data)
+
+    sendResponse({
+      res,
+      message: 'episode updated successfully',
+      data: await AdminUploadService.editEpisode({
+        episodeId: req.params.episodeId,
+        adminId: GetDefined.loggedInUser(req.user).id,
+        data,
+      }),
+    })
+  })
+
+  static deleteEpisode = Catch.async(async ({ params }, res) => {
+    await AdminUploadService.deleteEpisode(params.episodeId)
+    sendResponse({ res, message: 'episode deleted successfully' })
+  })
+
+  static deleteSeason = Catch.async(async ({ params }, res) => {
+    await AdminUploadService.deleteSeason(params.seasonId)
+    sendResponse({ res, message: 'season deleted successfully' })
+  })
+
   static editVideo = Catch.async(async ({ params, body, user, files: reqFiles }, res) => {
     if (body.data != null && typeof body.data !== 'string') {
       throw new OperationalError('optional formData.data must be a JSON serialized string', 400)
@@ -145,6 +184,10 @@ export class AdminUploadController {
 
     if (body.data) {
       Object.assign(data, JSON.parse(body.data))
+    } else {
+      // Also support ordinary JSON updates (for example taxonomy-only edits).
+      // Multipart requests continue to send their JSON payload in body.data.
+      Object.assign(data, body)
     }
 
     validate(editVideoSchema, data)
@@ -171,11 +214,40 @@ export class AdminUploadController {
     })
   })
 
-  static fetchSeasonsAndEpisodes = Catch.async(async ({ query, params }, res) => {
+  static fetchSeasonsAndEpisodes = Catch.async(async ({ query, params, user }, res) => {
+    const currentUser = GetDefined.loggedInUser(user)
+    const seasons = await AdminUploadService.getSeasonsAndEpisodes(params.vidId, query)
+    const isAdmin = currentUser.role === 'admin' || currentUser.role === 'superadmin'
+
+    if (!isAdmin) {
+      const video = await VideoModel.findById(params.vidId).select('vidClass')
+      if (video == null) throw new OperationalError('invalid video id', 404)
+
+      let canPlayEpisodes = video.vidClass === 'free'
+      if (!canPlayEpisodes && !isGuestUser(currentUser)) {
+        canPlayEpisodes = (
+          await PaymentService.checkHasValidContentPayment({
+            currentUserId: currentUser._id,
+            contentId: video._id.toString(),
+            contentType: 'vod',
+          })
+        ).canView
+      }
+
+      if (!canPlayEpisodes) {
+        seasons.forEach(season =>
+          season.episodes.forEach(episode => {
+            const lockedEpisode = episode as typeof episode & { video?: string }
+            delete lockedEpisode.video
+          }),
+        )
+      }
+    }
+
     sendResponse({
       res,
       message: `seasons fetched successfully`,
-      data: await AdminUploadService.getSeasonsAndEpisodes(params.vidId, query),
+      data: seasons,
     })
   })
 

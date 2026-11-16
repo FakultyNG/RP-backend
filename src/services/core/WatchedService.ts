@@ -17,8 +17,11 @@ interface CreateWatchedTimeInput extends Omit<WatchedSchema, 'userId' | 'created
 }
 
 export class WatchedService {
-  static deleteById = async (id: string) => {
-    const watched = await WatchedModel.findByIdAndDelete(id)
+  static deleteById = async (id: string, currentUserId: string) => {
+    const watched = await WatchedModel.findOneAndDelete({
+      _id: id,
+      userId: currentUserId,
+    })
 
     if (watched == null) {
       throw new OperationalError('invalid id', 404)
@@ -53,6 +56,8 @@ export class WatchedService {
         },
       },
 
+      { $sort: { updatedAt: -1, _id: -1 } },
+
       {
         $project: {
           userId: false,
@@ -63,7 +68,6 @@ export class WatchedService {
       },
 
       { $set: { watchedDocumentId: '$_id', _id: '$$REMOVE' } },
-      { $sort: { updatedAt: -1 } },
       { $skip: skip },
       { $limit: limit },
     ])) as (WatchedSchema & { _id: Types.ObjectId })[]

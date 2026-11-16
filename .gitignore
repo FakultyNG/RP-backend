@@ -5,7 +5,9 @@ node_modules
 tempMedia
 
 # FIREBASE ADMIN SECRET
-# fb-secret.json
+fb-secret.json
+**/*firebase-adminsdk*.json
+**/*push-firebase*.json
 
 # 
 home
@@ -21,3 +23,7 @@ media
 
 # js build 
 build
+credentials/*.pem
+
+# generated email preview screenshots and local browser profiles
+artifacts/email-previews/

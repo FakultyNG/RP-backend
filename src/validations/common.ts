@@ -77,7 +77,7 @@ const requiredForUseCases = (...useCases: string[]) =>
 
 export const initiatePaymentSchema = {
   body: Joi.object({
-    amount: Joi.number().strict().required(),
+    amount: Joi.number().strict().positive().required(),
     currency: CURRENCY_SCHEMA.required(),
     fullName: STRING_SCHEMA,
     method: STRING_SCHEMA.valid('flutterwave', 'wallet', 'wave').required(),

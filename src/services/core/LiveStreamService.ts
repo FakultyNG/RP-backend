@@ -13,9 +13,10 @@ import { MediaManagement } from '../media-management'
 import { UploadMediaUtils } from '../../utils/UploadMediaUtils'
 import { UserDocument } from '../../models/users.model'
 import { ClientSession } from 'mongoose'
-import { ViewModel } from '../../models/view.model'
 import { CommentModel } from '../../models/comments.model'
 import { QueryParamsFeatures, ExpressRequestQuery } from '../../utils/QueryParamsFeatures'
+import { ViewService } from './ViewService'
+import { LiveViewerPresenceModel } from '../../models/liveViewerPresence.model'
 
 export type CreateLiveData = {
   clientId: string
@@ -73,6 +74,7 @@ type HandleNewmemberInput = {
   userDocument: UserDocument
   liveId: string
   membership: 'JOIN' | 'LEAVE'
+  connectionId: string
 }
 
 export class LiveStreamService {
@@ -106,7 +108,7 @@ export class LiveStreamService {
   }
 
   static handleSocketMembership = async (
-    { userDocument, liveId, membership }: HandleNewmemberInput,
+    { userDocument, liveId, membership, connectionId }: HandleNewmemberInput,
     session?: ClientSession,
   ) => {
     const liveDocument = await LiveModel.findById(liveId)
@@ -121,36 +123,32 @@ export class LiveStreamService {
           throw new OperationalError('Live is Inactive', 400)
         }
 
-        // User may have viewed the content before joining
-        try {
-          await new ViewModel({
-            viewer: userDocument._id,
-            content: liveId,
-            contentType: 'live',
-          }).save({ session })
+        const view = await ViewService.registerUniqueView({
+          viewer: userDocument._id,
+          content: liveId,
+          contentType: 'live',
+          session,
+        })
+        if (view.counted) ++liveDocument.viewsCount
 
-          ++liveDocument.viewsCount
-        } catch {}
-
-        ++liveDocument.active_views
+        const joined = await LiveViewerPresenceModel.updateOne(
+          { connectionId, content: liveId },
+          { $setOnInsert: { connectionId, viewer: userDocument._id, content: liveId } },
+          { upsert: true, session },
+        )
+        if (joined.upsertedCount === 1) ++liveDocument.active_views
         await liveDocument.computeEngagements(session)
         break
 
       case 'LEAVE':
-        const deletedViewDocument = await ViewModel.findOneAndDelete(
-          {
-            viewer: userDocument._id,
-            content: liveId,
-            contentType: 'live',
-          },
+        const left = await LiveViewerPresenceModel.deleteOne(
+          { connectionId, content: liveId },
           { session },
         )
-
-        if (deletedViewDocument) return
-
-        --liveDocument.viewsCount
-        --liveDocument.active_views
-        await liveDocument.computeEngagements(session)
+        if (left.deletedCount === 1) {
+          liveDocument.active_views = Math.max(0, liveDocument.active_views - 1)
+          await liveDocument.computeEngagements(session)
+        }
         break
 
       default:
@@ -310,11 +308,12 @@ export class LiveStreamService {
   private static _checkLiveOngoinStreams = async (data: CreateLiveData) => {
     const liveDocument = await LiveModel.exists({
       client_id: data.clientId,
-      expiry: { $lt: new Date() },
+      expiry: { $gt: new Date() },
+      expired: false,
     }).select('_id')
 
     if (liveDocument) {
-      throw new OperationalError('Previous live event must expire', 403)
+      throw new OperationalError('The client already has a live event that has not expired', 403)
     }
   }
 
@@ -336,6 +335,7 @@ export class LiveStreamService {
       const photoUpload = await MediaManagement.storeImageAndSubtitle(
         coverPhotoFile,
         liveDocument.expiry,
+        'landscape-poster',
       )
 
       if (liveDocument.coverPhoto) {
@@ -374,7 +374,14 @@ export class LiveStreamService {
   }
 
   static updateLiveActiveState = async ({ liveId, active }: UpdateLiveActiveStateInput) => {
-    const live = await LiveModel.findByIdAndUpdate(liveId, { $set: { active } })
+    if (typeof active !== 'boolean') {
+      throw new OperationalError('active must be a boolean', 400)
+    }
+
+    const update = active
+      ? { $set: { active: true, expired: false } }
+      : { $set: { active: false, active_views: 0, endedAt: new Date() } }
+    const live = await LiveModel.findByIdAndUpdate(liveId, update)
 
     if (live == null) {
       throw new OperationalError('invalid live id', 404)
@@ -382,10 +389,20 @@ export class LiveStreamService {
   }
 
   private static _createLiveSession = async (data: CreateLiveData, session: MaybeSession) => {
+    const start = new Date(data.start)
+    const expiry = new Date(data.expiry)
+    if (Number.isNaN(start.getTime()) || Number.isNaN(expiry.getTime())) {
+      throw new OperationalError('start and expiry must be valid ISO dates', 400)
+    }
+    if (expiry <= start) {
+      throw new OperationalError('expiry must be later than start', 400)
+    }
+
     await this._checkLiveOngoinStreams(data)
 
     const liveDocument = new LiveModel({
       client_id: data.clientId,
+      creator_type: data.creatorType,
       title: data.title,
       subTitle: data.subTitle,
       stream_key: await getUniqueStreamKey(),
@@ -394,9 +411,9 @@ export class LiveStreamService {
       description: data.description,
       category: data.category || [],
       type: data.type,
-      upcoming: data.upcoming,
-      start: new Date(data.start),
-      expiry: new Date(data.expiry),
+      upcoming: data.upcoming ?? start.getTime() > Date.now(),
+      start,
+      expiry,
       sponsored: data.sponsored,
       popular: data.popular,
       location: data.location,
@@ -408,6 +425,7 @@ export class LiveStreamService {
       const photoUpload = await MediaManagement.storeImageAndSubtitle(
         data.coverPhoto,
         liveDocument.expiry,
+        'landscape-poster',
       )
 
       liveDocument.coverPhoto = {

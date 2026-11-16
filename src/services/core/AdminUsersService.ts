@@ -4,30 +4,52 @@ import { UserRepo } from '../../repositories/UserRepo'
 import { OperationalError } from '../../utils/OperationalError'
 import { ExpressRequestQuery, QueryParamsFeatures } from '../../utils/QueryParamsFeatures'
 import { Notification, NotificationPayload } from '../../notifications/notification'
-import { MulterFile } from '../../types'
+import { LoggedInUser, MulterFile } from '../../types'
 import { MediaManagement } from '../media-management'
 import env from '../../env'
+import { NotificationService } from './NotificationService'
 
 export class AdminUsersService {
   static sendAdminMainTopicPushNotification = async (
+    currentUser: LoggedInUser,
     payload: Omit<NotificationPayload, 'image'>,
     imageFile?: MulterFile,
   ) => {
     let image: string | undefined = undefined
+    let photo: { Bucket: string; Key: string } | undefined
+    const type = payload.type || 'MAIN_ADMIN_TOPIC_NOTIFICATION'
+    const metadata = payload.metadata || { destination: 'notifications' }
 
     if (imageFile) {
-      const upload = await MediaManagement.storeImageAndSubtitle(imageFile)
+      const upload = await MediaManagement.storeImageAndSubtitle(
+        imageFile,
+        undefined,
+        'landscape-poster',
+      )
       image = env.CDN_IMAGES_BASE_URL + '/' + upload.Key
+      photo = { Bucket: upload.Bucket, Key: upload.Key }
     }
 
-    await Notification.sendTopicPushNotification(
-      Notification.adminMainTopic,
-      {
-        ...payload,
-        image,
-      },
-      true,
-    )
+    await Promise.all([
+      NotificationService.createStoredAdminNotification({
+        currentUser,
+        title: payload.title,
+        description: payload.body,
+        type,
+        metadata,
+        photo,
+      }),
+      Notification.sendTopicPushNotification(
+        Notification.adminMainTopic,
+        {
+          ...payload,
+          type,
+          metadata,
+          image,
+        },
+        true,
+      ),
+    ])
   }
 
   static fetchAll = async (query: ExpressRequestQuery) => {

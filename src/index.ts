@@ -10,6 +10,9 @@ import { connectMongoDB } from './utils/connectDB'
 import { socketChat } from './socket/socketEvents'
 import { purgeOldTempMediaFiles } from './utils/purgeOldTempMediaFiles'
 import { WithWorkerThread } from './utils/WithWorkerThread'
+import { dropLegacyCustomerPhoneIndex } from './migrations/dropLegacyCustomerPhoneIndex'
+import { reconcileViewAnalytics } from './migrations/reconcileViewAnalytics'
+import { repairNegativeWalletBalances } from './migrations/repairNegativeWalletBalances'
 
 const { PORT } = env
 
@@ -25,17 +28,33 @@ const makeMediaDirectories = () => {
 
 makeMediaDirectories()
 
-connectMongoDB().then(conn => {
+connectMongoDB().then(async conn => {
   console.log(conn)
-
   httpServer.listen(PORT, async () => {
     console.log(`Node Server Listening on port: ${PORT} >>>>>> [http://localhost:${PORT}]`)
 
     socketChat(io)
     console.log('Sockets initited successfully')
-    WithWorkerThread.manageJobs('START')
+    if (env.ENABLE_CRON) {
+      await WithWorkerThread.manageJobs('START')
+    } else {
+      console.log('Cron jobs disabled for this service')
+    }
     setInterval(() => purgeOldTempMediaFiles(), 600000) // every ten minutes
   })
+
+  // Maintenance must not hold the HTTP health endpoint offline. Railway can
+  // replace the previous healthy deployment as soon as the API is listening,
+  // while idempotent repairs continue safely in the background.
+  void (async () => {
+    try {
+      await dropLegacyCustomerPhoneIndex()
+      await repairNegativeWalletBalances()
+      await reconcileViewAnalytics({ ensureIndexes: true })
+    } catch (error) {
+      console.error('Startup maintenance failed; API remains available', error)
+    }
+  })()
 })
 
 httpServer.on('close', async () => {
@@ -61,7 +80,9 @@ function shutdown(exception: string) {
     io.close()
     console.log('IO Websocket closed')
 
-    await WithWorkerThread.manageJobs('STOP')
+    if (env.ENABLE_CRON) {
+      await WithWorkerThread.manageJobs('STOP')
+    }
     await mongoose.connection.close(true)
     console.log('Mongoose connection closed')
     httpServer.close()

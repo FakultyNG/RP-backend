@@ -1,5 +1,6 @@
 import { Video, VideoModel, videoTypes } from '../../models/videos.model'
 import { OperationalError } from '../../utils/OperationalError'
+import { isYouTubeUrl } from '../../utils/youtube'
 import { MaybeSession, withMongoDBSession } from '../../utils/mongoDbSessionRunner'
 
 import {
@@ -20,7 +21,7 @@ import {
 
 import { Purge } from '../../utils/Purge'
 import { SeasonModel } from '../../models/seasons.model'
-import { PipelineStage, Types } from 'mongoose'
+import { PipelineStage } from 'mongoose'
 import { MediaManagement, UploadAndTranscodeConfig } from '../media-management'
 import { EpisodeModel } from '../../models/episodes.model'
 import { MulterFile, StringOrObjectId } from '../../types'
@@ -70,8 +71,8 @@ export class AdminUploadService {
     expire?: Date,
   ) => {
     const [portraitUpload, landscapeUpload] = await Promise.all([
-      MediaManagement.storeImageAndSubtitle(portraitFile, expire),
-      MediaManagement.storeImageAndSubtitle(landscapeFile, expire),
+      MediaManagement.storeImageAndSubtitle(portraitFile, expire, 'portrait-poster'),
+      MediaManagement.storeImageAndSubtitle(landscapeFile, expire, 'landscape-poster'),
     ])
 
     return {
@@ -185,6 +186,13 @@ export class AdminUploadService {
     if (incomingData.vidClass === 'exclusive' && incomingData.amount == null) {
       throw new OperationalError('amount is required when video class is exclusive', 400)
     }
+
+    if (incomingData.vidClass !== 'free' && isYouTubeUrl(incomingData.videoLink)) {
+      throw new OperationalError(
+        'YouTube links can only be used as trailers or as the main video for free content',
+        400,
+      )
+    }
   }
 
   static _uploadVideoSession = async (params: AddVideoParams, session: MaybeSession) => {
@@ -269,6 +277,112 @@ export class AdminUploadService {
   static addEpisode = async (input: AddEpisodeInput) =>
     await withMongoDBSession(this._addEpisodesWithSession, input)
 
+  static editEpisode = async (input: EditEpisodeInput) => {
+    const { episode, replacedUploads } = await withMongoDBSession(
+      this._editEpisodeWithSession,
+      input,
+    )
+
+    await Promise.allSettled(
+      replacedUploads.map(uploadId => Purge.videoUploadById(uploadId as any)),
+    )
+    return episode
+  }
+
+  static _editEpisodeWithSession = async (
+    { episodeId, data, adminId }: EditEpisodeInput,
+    session: MaybeSession,
+  ) => {
+    data.trailer &&
+      UploadMediaUtils.allowMimetype(data.trailer, 'video', 'trailer must be a video file')
+    data.video && UploadMediaUtils.allowMimetype(data.video, 'video', 'video must be a video file')
+
+    const episode = await EpisodeModel.findById(episodeId).session(session ?? null)
+    if (episode == null) throw new OperationalError('invalid episode id', 404)
+
+    const replacedUploads: StringOrObjectId[] = []
+    episode.admin = adminId as any
+    if (data.title !== undefined) episode.title = data.title
+    if (data.description !== undefined) episode.description = data.description
+
+    if (data.video || data.videoLink) {
+      if (episode.videoUpload) replacedUploads.push(episode.videoUpload)
+
+      if (data.video) {
+        const upload = await MediaManagement.uploadAndInitiateMediaConvert(data.video)
+        const uploadDocument = UploadMediaUtils.getVideoUploadDocument(upload)
+        uploadDocument.parentId = episode._id
+        uploadDocument.parentType = 'episode'
+        await uploadDocument.save({ session })
+
+        episode.videoUpload = uploadDocument._id
+        episode.videoLink = undefined
+        episode.isVideoReady = false
+      } else {
+        episode.videoUpload = undefined
+        episode.videoLink = data.videoLink
+        episode.isVideoReady = true
+      }
+    }
+
+    if (data.trailer || data.trailerLink) {
+      if (episode.trailerUpload) replacedUploads.push(episode.trailerUpload)
+
+      if (data.trailer) {
+        const upload = await MediaManagement.uploadAndInitiateMediaConvert(data.trailer)
+        const uploadDocument = UploadMediaUtils.getVideoUploadDocument(upload)
+        uploadDocument.parentId = episode._id
+        uploadDocument.parentType = 'episode-trailer'
+        await uploadDocument.save({ session })
+
+        episode.trailerUpload = uploadDocument._id
+        episode.trailerLink = undefined
+        episode.isTrailerReady = false
+      } else {
+        episode.trailerUpload = undefined
+        episode.trailerLink = data.trailerLink
+        episode.isTrailerReady = true
+      }
+    }
+
+    await episode.save({ session })
+    return { episode, replacedUploads }
+  }
+
+  static deleteEpisode = async (episodeId: string) => {
+    const episode = await EpisodeModel.findByIdAndDelete(episodeId)
+    if (episode == null) throw new OperationalError('invalid episode id', 404)
+
+    const followingEpisodes = await EpisodeModel.find({
+      season: episode.season,
+      episodeNumber: { $gt: episode.episodeNumber },
+    }).sort({ episodeNumber: 1 })
+
+    // Renumber in ascending order so the unique season/episode index can never
+    // collide while the gap left by the deleted episode is being closed.
+    for (const followingEpisode of followingEpisodes) {
+      followingEpisode.episodeNumber -= 1
+      await followingEpisode.save()
+    }
+
+    await Promise.allSettled([
+      Purge.subtitlesByParentId(episode._id),
+      episode.videoUpload ? Purge.videoUploadById(episode.videoUpload) : Promise.resolve(),
+      episode.trailerUpload ? Purge.videoUploadById(episode.trailerUpload) : Promise.resolve(),
+    ])
+  }
+
+  static deleteSeason = async (seasonId: string) => {
+    const season = await SeasonModel.findById(seasonId)
+    if (season == null) throw new OperationalError('invalid season id', 404)
+
+    if ((await EpisodeModel.exists({ season: seasonId })) != null) {
+      throw new OperationalError('Delete every episode in this season first', 409)
+    }
+
+    await season.deleteOne()
+  }
+
   static _addEpisodesWithSession = async (
     { seasonId, data, adminId }: AddEpisodeInput,
     session: MaybeSession,
@@ -331,32 +445,56 @@ export class AdminUploadService {
       throw new OperationalError('invalid video id', 404)
     }
 
+    const nextVideoClass = data.vidClass ?? videoDocument.vidClass
+    const nextVideoLink = data.videoLink ?? videoDocument.videoLink
+    if (nextVideoClass !== 'free' && isYouTubeUrl(nextVideoLink)) {
+      throw new OperationalError(
+        'YouTube links can only be used as trailers or as the main video for free content',
+        400,
+      )
+    }
+
+    const previousPortraitPhoto = data.portraitPoster
+      ? videoDocument.portraitPhoto && {
+          Key: videoDocument.portraitPhoto.Key,
+          Bucket: videoDocument.portraitPhoto.Bucket,
+        }
+      : undefined
+    const previousLandscapePhoto = data.landscapePoster
+      ? videoDocument.landscapePhoto && {
+          Key: videoDocument.landscapePhoto.Key,
+          Bucket: videoDocument.landscapePhoto.Bucket,
+        }
+      : undefined
+
     videoDocument.description = data.description || videoDocument.description
     videoDocument.amount = data.amount || videoDocument.amount
     videoDocument.title = data.title || videoDocument.title
     videoDocument.primaryColor = data.primaryColor || videoDocument.primaryColor
-    videoDocument.upcoming = data.upcoming || videoDocument.upcoming
+    if (typeof data.upcoming === 'boolean') {
+      videoDocument.upcoming = data.upcoming
+    }
     videoDocument.adminId = toObjectId(adminId)
     videoDocument.description = data.description || videoDocument.description
     videoDocument.vidClass = (data.vidClass as any) || videoDocument.vidClass
     videoDocument.artistName = data.artistName || videoDocument.artistName
     videoDocument.pg = data.pg || videoDocument.pg
 
-    const addToSet = (prevs: Types.ObjectId[] | undefined | null, additions: string[]) => {
-      if (!prevs) return [...new Set(additions)].map(toObjectId)
-      return [...new Set([...prevs.map(e => e.toString()), ...additions])].map(toObjectId)
+    const replaceReferences = (references: string[]) =>
+      [...new Set(references)].map(toObjectId)
+
+    // Edit payloads represent the complete selected taxonomy. Replacing these
+    // arrays is required so deselected values are actually removed in MongoDB.
+    if (data.genre !== undefined) {
+      videoDocument.genre = replaceReferences(data.genre)
     }
 
-    if (data.genre) {
-      videoDocument.genre = addToSet(videoDocument.genre, data.genre)
+    if (data.category !== undefined) {
+      videoDocument.category = replaceReferences(data.category)
     }
 
-    if (data.category) {
-      videoDocument.category = addToSet(videoDocument.category, data.category)
-    }
-
-    if (data.cast) {
-      videoDocument.cast = addToSet(videoDocument.cast, data.cast)
+    if (data.cast !== undefined) {
+      videoDocument.cast = replaceReferences(data.cast)
     }
 
     videoDocument.defaultRating = data.defaultRating
@@ -378,41 +516,32 @@ export class AdminUploadService {
     videoDocument.runtime = data.runtime || videoDocument.runtime
     videoDocument.active = data.active || videoDocument.active
     videoDocument.showViews = data.showViews || videoDocument.showViews
-    videoDocument.upcoming = data.upcoming || videoDocument.upcoming
-
     if (data.portraitPoster) {
-      const potraitUpload = await MediaManagement.storeImageAndSubtitle(data.portraitPoster, expiry)
-
-      if (videoDocument.portraitPhoto) {
-        MediaManagement.deleteObject(
-          videoDocument.portraitPhoto.Key,
-          videoDocument.portraitPhoto.Bucket,
-        )
-      }
+      const potraitUpload = await MediaManagement.storeImageAndSubtitle(
+        data.portraitPoster,
+        expiry,
+        'portrait-poster',
+      )
 
       videoDocument.portraitPhoto = {
         Bucket: potraitUpload.Bucket,
         Key: potraitUpload.Key,
       }
+      videoDocument.markModified('portraitPhoto')
     }
 
     if (data.landscapePoster) {
       const newLandscapePoster = await MediaManagement.storeImageAndSubtitle(
         data.landscapePoster,
         expiry,
+        'landscape-poster',
       )
 
-      if (videoDocument.landscapePhoto) {
-        MediaManagement.deleteObject(
-          videoDocument.landscapePhoto.Key,
-          videoDocument.landscapePhoto.Bucket,
-        )
-      }
-
-      videoDocument.portraitPhoto = {
+      videoDocument.landscapePhoto = {
         Bucket: newLandscapePoster.Bucket,
         Key: newLandscapePoster.Key,
       }
+      videoDocument.markModified('landscapePhoto')
     }
 
     if (data.video) {
@@ -449,6 +578,14 @@ export class AdminUploadService {
     }
 
     await videoDocument.save({ session })
+
+    if (previousPortraitPhoto) {
+      void MediaManagement.deleteObject(previousPortraitPhoto.Key, previousPortraitPhoto.Bucket)
+    }
+    if (previousLandscapePhoto) {
+      void MediaManagement.deleteObject(previousLandscapePhoto.Key, previousLandscapePhoto.Bucket)
+    }
+
     return videoDocument
   }
 
@@ -488,9 +625,10 @@ export class AdminUploadService {
 
   static getSeasonsAndEpisodes = async (vidSeriesId: string, queryParams: any) => {
     const { page, limit } = QueryParamsFeatures.paginagteParams(queryParams)
+    const includeProcessing = this.resolveWithMediaSources(queryParams)
 
     const seasonsWithMediaSources = MovieMediaSourcesUtils.resolveSeasonsMediaSources(
-      await VideoRepo.fetchSeasonsAndEpisodes(vidSeriesId, page, limit),
+      await VideoRepo.fetchSeasonsAndEpisodes(vidSeriesId, page, limit, includeProcessing),
       '720p',
     )
 
@@ -512,6 +650,11 @@ export type AddEpisodeInput = {
   seasonId: string
   data: EpisodeReqData
   adminId: string
+}
+
+export type EditEpisodeInput = Omit<AddEpisodeInput, 'seasonId' | 'data'> & {
+  episodeId: string
+  data: Partial<EpisodeReqData>
 }
 
 type EpisodeReqData = {

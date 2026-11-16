@@ -13,6 +13,17 @@ const setToNumberWithDefault = (key: string, defaultNum: number) => {
   return Number(val)
 }
 
+const setToBooleanWithDefault = (key: string, defaultValue: boolean) => {
+  const val = process.env[key]
+  if (val == null) return defaultValue
+
+  if (!['true', 'false'].includes(val.toLowerCase())) {
+    throw new Error(`optional env variable ${key} must be true or false if present`)
+  }
+
+  return val.toLowerCase() === 'true'
+}
+
 const getValidEnv = <T extends Record<string, any>>(variables: Partial<T>) => {
   Object.entries(variables).forEach(([key, val]) => {
     if (val === undefined) {
@@ -27,7 +38,9 @@ export const env = getValidEnv({
   //
   PORT: process.env.PORT,
   MONGO_DB_URL: process.env.MONGO_DB_URL,
+  MONGO_DB_NAME: process.env.MONGO_DB_NAME ?? 'reeplayDB',
   NODE_ENV: process.env.NODE_ENV,
+  ENABLE_CRON: setToBooleanWithDefault('ENABLE_CRON', false),
 
   // emails
   MAIL_SENDER: process.env.MAIL_SENDER,
@@ -40,6 +53,7 @@ export const env = getValidEnv({
   JWT_SECRET: process.env.JWT_SECRET,
   GUEST_TOKEN: process.env.GUEST_TOKEN,
   JWT_SECRET_REFRESH_TOKEN: process.env.JWT_SECRET_REFRESH_TOKEN,
+  FIREBASE_SERVICE_ACCOUNT_BASE64: process.env.FIREBASE_SERVICE_ACCOUNT_BASE64,
 
   // flutterwave  secrets
   FLUTTERWAVE_SECRET_KEY: process.env.FLUTTERWAVE_SECRET_KEY,
@@ -90,7 +104,7 @@ export const env = getValidEnv({
   // RP_RTMP_PORT: setToNumberWithDefault('RP_RTMP_PORT', 1935),
 
   get RP_RTMP_SERVER_URL() {
-    return this.IS_PROD ? this.RP_RTMP_BASE_URL : `rmtp://localhost/live`
+    return this.IS_PROD ? this.RP_RTMP_BASE_URL : `rtmp://localhost/live`
   },
 
   get RP_PLAYBACK_URL() {

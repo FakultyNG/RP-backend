@@ -18,7 +18,7 @@ const schema = new Schema({
     enum: viewContents,
     required: true,
   },
-})
+}, { timestamps: true })
 
 // on the off chance that two contents from have the same ID
 schema.index({ viewer: 1, content: 1, contentType: 1 }, { unique: true })

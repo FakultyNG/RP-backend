@@ -22,7 +22,15 @@ superAdminUploadsRouter.post(
   AdminUploadController.addEpisode,
 )
 
+superAdminUploadsRouter.put(
+  '/episodes/edit/:episodeId',
+  Multer.adminUploadVideoConfig,
+  AdminUploadController.editEpisode,
+)
+superAdminUploadsRouter.delete('/episodes/remove/:episodeId', AdminUploadController.deleteEpisode)
+
 superAdminUploadsRouter.post('/seasons/add/:videoId', AdminUploadController.addSeason)
+superAdminUploadsRouter.delete('/seasons/remove/:seasonId', AdminUploadController.deleteSeason)
 
 superAdminUploadsRouter.put(
   '/edit/:id',

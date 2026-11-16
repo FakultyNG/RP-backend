@@ -1,4 +1,4 @@
-import { connect, connection } from 'mongoose'
+import { connect, connection, set } from 'mongoose'
 import env from '../env'
 
 export const connectMongoDB = async (url = env.MONGO_DB_URL) => {
@@ -6,6 +6,12 @@ export const connectMongoDB = async (url = env.MONGO_DB_URL) => {
     return 'Already Connected to MongoDB'
   }
 
-  await connect(url)
+  set('autoIndex', true)
+  await connect(url, {
+    dbName: env.MONGO_DB_NAME,
+    // The Railway Hobby database has enough capacity to reconcile model
+    // indexes. MongoDB skips indexes that already exist.
+    autoIndex: true,
+  })
   return 'Connected to mongoDB succesfully'
 }

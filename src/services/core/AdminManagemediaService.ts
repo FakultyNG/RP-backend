@@ -10,6 +10,7 @@ import { LiveRepo } from '../../repositories/LiveRepo'
 import { LiveMediaSourcesUtils } from '../../utils/LiveMediaSourcesUtils'
 import { EpisodeModel } from '../../models/episodes.model'
 import { MediaManagement } from '../media-management'
+import { normalizeSubtitleToWebVtt } from '../../utils/subtitle'
 
 export type AddSubtitleData = {
   parentId: string
@@ -60,16 +61,32 @@ export class AdminManageMediaService {
       throw new OperationalError('parent does not exist', 404)
     }
 
-    const { Bucket, Key } = await MediaManagement.storeImageAndSubtitle(data.subtitle)
-
-    const subtitle = await SubtitleModel.create({
+    const duplicate = await SubtitleModel.exists({
       video_id: data.parentId,
       parentType: data.parentType,
-      bucket: Bucket,
-      key: Key,
-      language: data.language,
+      language: data.language.trim().toLowerCase(),
     })
+    if (duplicate) {
+      throw new OperationalError(
+        `A ${data.language} subtitle already exists for this content. Remove it before uploading a replacement.`,
+        409,
+      )
+    }
 
-    return subtitle
+    const webVtt = normalizeSubtitleToWebVtt(data.subtitle.buffer)
+    const { Bucket, Key } = await MediaManagement.storeSubtitle(data.subtitle, webVtt)
+
+    try {
+      return await SubtitleModel.create({
+        video_id: data.parentId,
+        parentType: data.parentType,
+        bucket: Bucket,
+        key: Key,
+        language: data.language,
+      })
+    } catch (error) {
+      await MediaManagement.deleteObject(Key, Bucket)
+      throw error
+    }
   }
 }

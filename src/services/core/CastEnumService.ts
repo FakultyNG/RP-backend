@@ -59,6 +59,8 @@ export class CastEnumService {
       throw new OperationalError('invalis castId', 404)
     }
 
+    let previousPhoto: { key: string; bucket: string } | null = null
+
     if (photoFile) {
       const imageUpload = await MediaManagement.storeImageAndSubtitle(photoFile)
 
@@ -66,8 +68,7 @@ export class CastEnumService {
         throw new OperationalError('Could not upload photo', 400)
       }
 
-      // delete previous photo
-      MediaManagement.deleteObject(cast.key, cast.bucket)
+      previousPhoto = { key: cast.key, bucket: cast.bucket }
 
       // set new pointers to bucket object
       cast.key = imageUpload.Key
@@ -80,6 +81,10 @@ export class CastEnumService {
     cast.link = link ?? cast.link
     cast.selectButtonType = selectButtonType ?? cast.selectButtonType
     await cast.save()
+
+    if (previousPhoto) {
+      void MediaManagement.deleteObject(previousPhoto.key, previousPhoto.bucket)
+    }
   }
 
   static setCastsWithPhotoUrl = async (casts: (CastEnumSchema | CastEnumDocument)[]) => {

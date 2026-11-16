@@ -15,7 +15,6 @@ import { FilterQuery } from 'mongoose'
 import env from '../../env'
 import { LiveSchema, LiveModel } from '../../models/lives.model'
 import { VideoModel } from '../../models/videos.model'
-import { ViewDocument, ViewModel } from '../../models/view.model'
 import { LiveRepo } from '../../repositories/LiveRepo'
 import { VideoRepo, VodCardResponse } from '../../repositories/VideoRepo'
 import { LiveAggrRes } from '../../types/Live'
@@ -27,6 +26,15 @@ import { VideoQuality, VidUploadUtils } from '../../utils/VideoUploadUtils'
 import { getPromiseAllFulfilledResults } from '../../utils/promises'
 import { VideoUploadRepo } from '../../repositories/VideoUploadRepo'
 import { LikeModel } from '../../models/likes.model'
+import {
+  assertGuestCanView,
+  filterGuestLives,
+  filterGuestVods,
+  isGuestUser,
+} from '../../utils/guestAccess'
+import { ViewService } from '../../services/core/ViewService'
+import { AutoFeaturedService } from '../../services/core/AutoFeaturedService'
+import { isYouTubeUrl } from '../../utils/youtube'
 
 export type PaymentHistoryCaller = {
   caller: 'Admin' | 'Others'
@@ -48,6 +56,18 @@ type LiveEventsType =
   | 'podcasts popular'
 
 export class SharedController extends UploadMediaUtils {
+  static getVodDetailsById = Catch.async(async ({ params, user }, res) => {
+    const currentUser = GetDefined.loggedInUser(user)
+    const videos = filterGuestVods(await VideoRepo.fetchById(params.vodId), currentUser)
+    const [video] = MovieMediaSourcesUtils.resolveMediaSources(videos, currentUser.videoQuality)
+
+    if (video == null) {
+      throw new OperationalError('VOD not found', 404)
+    }
+
+    sendResponse({ res, data: video })
+  })
+
   static getVodMetaBy = Catch.async(async (req, res) => {
     const videoDocument = await VideoModel.findById(req.params.vodId).select(
       'averageRating viewsCount totalRatings commentsCount likesCount',
@@ -61,13 +81,17 @@ export class SharedController extends UploadMediaUtils {
 
   static getAllVods = Catch.async(async (req, res) => {
     const { page, limit } = QueryParamsFeatures.paginagteParams(req.query)
-    const { videoQuality } = GetDefined.loggedInUser(req.user)
+    const user = GetDefined.loggedInUser(req.user)
+    const { videoQuality } = user
 
     const videoDocuments = await VideoRepo.fetchFromLatest(page, limit)
 
     sendResponse({
       res,
-      data: MovieMediaSourcesUtils.resolveMediaSources(videoDocuments, videoQuality),
+      data: MovieMediaSourcesUtils.resolveMediaSources(
+        filterGuestVods(videoDocuments, user),
+        videoQuality,
+      ),
     })
   })
 
@@ -210,6 +234,7 @@ export class SharedController extends UploadMediaUtils {
         previewVideo: files.previewVideo?.[0],
         coverPhoto: files.coverPhoto?.[0],
         clientId: isAdmin ? parsedData.clientId : GetDefined.loggedInUser(req.user).id,
+        creatorType: isAdmin ? 'admin' : 'client',
       }
 
       validate(addLiveSchema, data)
@@ -289,7 +314,7 @@ export class SharedController extends UploadMediaUtils {
     sendResponse({
       res,
       message: 'videos fetched succesfully',
-      data: videos,
+      data: filterGuestVods(videos, user),
     })
   })
 
@@ -304,11 +329,13 @@ export class SharedController extends UploadMediaUtils {
   })
 
   static fetchVideoSource = Catch.async(async (req, res) => {
-    const loggedInUserId = GetDefined.loggedInUser(req.user)._id.toString()
+    const user = GetDefined.loggedInUser(req.user)
 
     const [videoDocumentResult, videoQualityResult] = await Promise.allSettled([
       VideoModel.findById(req.params.videoId),
-      VidUploadUtils.getUserVideoQuality(loggedInUserId),
+      isGuestUser(user)
+        ? Promise.resolve<VideoQuality>('480p')
+        : VidUploadUtils.getUserVideoQuality(user._id.toString()),
     ])
 
     if (videoDocumentResult.status === 'rejected') {
@@ -324,9 +351,31 @@ export class SharedController extends UploadMediaUtils {
     if (videoDocument == null) {
       throw new OperationalError('Not Found', 404)
     }
+    assertGuestCanView(user, videoDocument.vidClass)
 
     switch (req.params.type) {
       case 'vod':
+        if (videoDocument.vidClass !== 'free' && isYouTubeUrl(videoDocument.videoLink)) {
+          throw new OperationalError(
+            'Paid content cannot use YouTube as its main playback source',
+            422,
+          )
+        }
+
+        if (videoDocument.vidClass !== 'free') {
+          const access = await PaymentService.checkHasValidContentPayment({
+            contentId: videoDocument._id.toString(),
+            contentType: 'vod',
+            currentUserId: user._id,
+          })
+          if (!access.canView) {
+            throw new OperationalError(
+              'Successful wallet payment required to watch this content',
+              403,
+            )
+          }
+        }
+
         if (videoDocument.videoLink) {
           source = videoDocument.videoLink
           break
@@ -347,6 +396,7 @@ export class SharedController extends UploadMediaUtils {
       case 'trailer':
         if (videoDocument.trailerLink) {
           source = videoDocument.trailerLink
+          break
         }
 
         const videoUploadDocument = await VideoUploadRepo.findByParentId(videoDocument._id).where(
@@ -376,19 +426,25 @@ export class SharedController extends UploadMediaUtils {
   })
 
   static getFeaturedVods = Catch.async(async ({ query, user }, res) => {
-    const { videoQuality } = GetDefined.loggedInUser(user)
+    await AutoFeaturedService.refreshIfDue()
+    const currentUser = GetDefined.loggedInUser(user)
+    const { videoQuality } = currentUser
     const { page, limit } = QueryParamsFeatures.paginagteParams(query)
 
     const vods = await VideoRepo.fetchFeatured(page, limit)
 
     sendResponse({
       res,
-      data: MovieMediaSourcesUtils.resolveMediaSources(vods, videoQuality),
+      data: MovieMediaSourcesUtils.resolveMediaSources(
+        filterGuestVods(vods, currentUser),
+        videoQuality,
+      ),
       message: 'featured contents fetched successful',
     })
   })
 
   static getSimilarByCastId = Catch.async(async ({ query, user, params }, res) => {
+    const currentUser = GetDefined.loggedInUser(user)
     const { page, limit } = QueryParamsFeatures.paginagteParams(query)
 
     const vods = await VideoRepo.fetchSimilarByCastId({
@@ -401,15 +457,16 @@ export class SharedController extends UploadMediaUtils {
     sendResponse({
       res,
       data: MovieMediaSourcesUtils.resolveMediaSources(
-        vods,
-        GetDefined.loggedInUser(user).videoQuality,
+        filterGuestVods(vods, currentUser),
+        currentUser.videoQuality,
       ),
       message: '',
     })
   })
 
   static getSimilarByGenreId = Catch.async(async ({ query, user, params }, res) => {
-    const { videoQuality } = GetDefined.loggedInUser(user)
+    const currentUser = GetDefined.loggedInUser(user)
+    const { videoQuality } = currentUser
 
     const { page, limit } = QueryParamsFeatures.paginagteParams(query)
 
@@ -422,7 +479,10 @@ export class SharedController extends UploadMediaUtils {
 
     sendResponse({
       res,
-      data: MovieMediaSourcesUtils.resolveMediaSources(vods, videoQuality),
+      data: MovieMediaSourcesUtils.resolveMediaSources(
+        filterGuestVods(vods, currentUser),
+        videoQuality,
+      ),
       message: '',
     })
   })
@@ -430,7 +490,8 @@ export class SharedController extends UploadMediaUtils {
   static getByCategoryIdAndAndGenreId = Catch.async(async ({ query, user, params }, res) => {
     const { page, limit } = QueryParamsFeatures.paginagteParams(query)
 
-    const { videoQuality } = GetDefined.loggedInUser(user)
+    const currentUser = GetDefined.loggedInUser(user)
+    const { videoQuality } = currentUser
 
     const vods = await VideoRepo.fetchByCategAndCast({
       page,
@@ -441,13 +502,17 @@ export class SharedController extends UploadMediaUtils {
 
     sendResponse({
       res,
-      data: MovieMediaSourcesUtils.resolveMediaSources(vods, videoQuality),
+      data: MovieMediaSourcesUtils.resolveMediaSources(
+        filterGuestVods(vods, currentUser),
+        videoQuality,
+      ),
       message: '',
     })
   })
 
   static randomSuggestions = Catch.async(async ({ query, user }, res) => {
-    const { videoQuality } = GetDefined.loggedInUser(user)
+    const currentUser = GetDefined.loggedInUser(user)
+    const { videoQuality } = currentUser
     const { limit } = QueryParamsFeatures.paginagteParams(query)
 
     const [vodsRepoReult, liveRepoResult] = await Promise.allSettled([
@@ -464,8 +529,14 @@ export class SharedController extends UploadMediaUtils {
     }
 
     const response = {
-      vods: MovieMediaSourcesUtils.resolveMediaSources(vodsRepoReult.value, videoQuality),
-      lives: await LiveMediaSourcesUtils.resolveSources(liveRepoResult.value, videoQuality),
+      vods: MovieMediaSourcesUtils.resolveMediaSources(
+        filterGuestVods(vodsRepoReult.value, currentUser),
+        videoQuality,
+      ),
+      lives: await LiveMediaSourcesUtils.resolveSources(
+        filterGuestLives(liveRepoResult.value, currentUser),
+        videoQuality,
+      ),
     }
 
     sendResponse({
@@ -476,17 +547,22 @@ export class SharedController extends UploadMediaUtils {
   })
 
   static getFeaturedLives = Catch.async(async ({ query, user }, res) => {
-    const vidQuality = await VidUploadUtils.getUserVideoQuality(
-      GetDefined.loggedInUser(user)._id.toString(),
-    )
+    await AutoFeaturedService.refreshIfDue()
+    const currentUser = GetDefined.loggedInUser(user)
+    const vidQuality = isGuestUser(currentUser)
+      ? '480p'
+      : await VidUploadUtils.getUserVideoQuality(currentUser._id.toString())
 
     sendResponse({
       res,
       message: 'featured contents fetched successful',
       data: await LiveMediaSourcesUtils.resolveSources(
-        await LiveRepo.getFeatured(
-          guranteeNumericResult(query.page, 1),
-          guranteeNumericResult(query.limit, 10),
+        filterGuestLives(
+          await LiveRepo.getFeatured(
+            guranteeNumericResult(query.page, 1),
+            guranteeNumericResult(query.limit, 10),
+          ),
+          currentUser,
         ),
         vidQuality,
       ),
@@ -524,42 +600,19 @@ export class SharedController extends UploadMediaUtils {
     })
   })
 
-  protected static _computeViewParentEngagements = async (viewDocument: ViewDocument) => {
-    try {
-      switch (viewDocument.contentType) {
-        case 'vod':
-          await VideoModel.findByIdAndUpdate(viewDocument.content, { $inc: { viewsCount: 1 } })
-          break
-
-        default:
-          break
-      }
-    } catch (e) {
-      console.error('Error in _computeParentEngagements', e)
-    }
-  }
-
   static viewContent = Catch.async(async (req, res) => {
     const user = GetDefined.loggedInUser(req.user)
     denyGuestUser(user)
-
-    try {
-      const viewDocument = await ViewModel.create({
-        viewer: user._id,
-        content: req.body.content,
-        contentType: req.body.contentType,
-      })
-
-      this._computeViewParentEngagements(viewDocument)
-    } catch (e: any) {
-      if (e.code !== 11000) {
-        throw e
-      }
-    }
+    const result = await ViewService.registerUniqueView({
+      viewer: user._id,
+      content: req.body.content,
+      contentType: req.body.contentType,
+    })
 
     sendResponse({
       res,
       message: 'done',
+      data: result,
     })
   })
 
@@ -666,9 +719,12 @@ export class SharedController extends UploadMediaUtils {
           break
       }
 
-      const vidQuality = await VidUploadUtils.getUserVideoQuality(
-        GetDefined.loggedInUser(req.user)._id.toString(),
-      )
+      const currentUser = GetDefined.loggedInUser(req.user)
+      if (isGuestUser(currentUser)) filter.vid_class = 'free'
+
+      const vidQuality = isGuestUser(currentUser)
+        ? '480p'
+        : await VidUploadUtils.getUserVideoQuality(currentUser._id.toString())
 
       const { page, limit } = QueryParamsFeatures.paginagteParams(req.query)
 
@@ -688,17 +744,18 @@ export class SharedController extends UploadMediaUtils {
     const page = guranteeNumericResult(req.query.page, 1)
     const limit = guranteeNumericResult(req.query.limit, 10)
 
-    const vidQuality = await VidUploadUtils.getUserVideoQuality(
-      GetDefined.loggedInUser(req.user)._id.toString(),
-    )
+    const currentUser = GetDefined.loggedInUser(req.user)
+    const vidQuality = isGuestUser(currentUser)
+      ? '480p'
+      : await VidUploadUtils.getUserVideoQuality(currentUser._id.toString())
 
     let lives: LiveAggrRes[] = await LiveMediaSourcesUtils.resolveSources(
-      await LiveRepo.getFeatured(page, limit),
+      filterGuestLives(await LiveRepo.getFeatured(page, limit), currentUser),
       vidQuality,
     )
 
     let vods: VodCardResponse[] = MovieMediaSourcesUtils.resolveMediaSources(
-      await VideoRepo.fetchFeatured(page, limit),
+      filterGuestVods(await VideoRepo.fetchFeatured(page, limit), currentUser),
       vidQuality,
     )
 
@@ -717,23 +774,25 @@ export class SharedController extends UploadMediaUtils {
     // }
 
     // TODO: This is hackey. Optimize and Polish
-    lives = getPromiseAllFulfilledResults(
-      await Promise.allSettled(
-        lives.map(async live => {
-          const response = Object.assign(live, {
-            canView: (
-              await PaymentService.checkHasValidContentPayment({
-                currentUserId: GetDefined.loggedInUser(req.user)._id,
-                contentId: live._id,
-                contentType: 'live',
+    lives = isGuestUser(currentUser)
+      ? lives.map(live => Object.assign(live, { canView: true }))
+      : getPromiseAllFulfilledResults(
+          await Promise.allSettled(
+            lives.map(async live => {
+              const response = Object.assign(live, {
+                canView: (
+                  await PaymentService.checkHasValidContentPayment({
+                    currentUserId: currentUser._id,
+                    contentId: live._id,
+                    contentType: 'live',
+                  })
+                ).canView,
               })
-            ).canView,
-          })
 
-          return response
-        }),
-      ),
-    )
+              return response
+            }),
+          ),
+        )
 
     sendResponse({
       res,
@@ -747,14 +806,27 @@ export class SharedController extends UploadMediaUtils {
 
   static streamLiveEvent = Catch.async(async (req, res) => {
     const streamId = req.params.id
+    const currentUser = GetDefined.loggedInUser(req.user)
     const event = await LiveModel.findById(streamId)
 
     if (event == null) {
       throw new OperationalError('invalid stream ID', 404)
     }
 
-    if (event.expired) {
+    if (event.expired || event.expiry <= new Date()) {
       throw new OperationalError('stream event has expired', 400)
+    }
+    assertGuestCanView(currentUser, event.vid_class)
+
+    if (event.vid_class !== 'free') {
+      const access = await PaymentService.checkHasValidContentPayment({
+        currentUserId: currentUser._id,
+        contentId: event._id.toString(),
+        contentType: 'live',
+      })
+      if (!access.canView) {
+        throw new OperationalError('Successful wallet payment required to watch this content', 403)
+      }
     }
 
     const stream_url = `${env.RP_PLAYBACK_URL}${event.stream_key}/index.m3u8`

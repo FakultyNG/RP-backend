@@ -7,6 +7,7 @@ import { EpisodeModel } from '../models/episodes.model'
 import { Live } from '../models/lives.model'
 import { PaymentModel } from '../models/payments.model'
 import { MongoDBObjectId } from '../types/general'
+import { StringOrObjectId } from '../types'
 
 export class Purge {
   static live = (live: Live) => {
@@ -27,7 +28,7 @@ export class Purge {
     })
   }
 
-  static videoUploadById = async (vidUploadId: MongoDBObjectId) => {
+  static videoUploadById = async (vidUploadId: StringOrObjectId) => {
     try {
       const vidUpload = await VideoUploadModel.findByIdAndDelete(vidUploadId)
 
@@ -109,10 +110,16 @@ export class Purge {
           try {
             const episodes = await EpisodeModel.find({ season: season._id })
 
-            episodes.forEach(async ep => {
-              ep.videoUpload && this.videoUploadById(ep.videoUpload)
-              ep.trailerUpload && this.videoUploadById(ep.trailerUpload)
-            })
+            await Promise.all(
+              episodes.map(ep =>
+                Promise.allSettled([
+                  ep.videoUpload ? this.videoUploadById(ep.videoUpload) : Promise.resolve(),
+                  ep.trailerUpload ? this.videoUploadById(ep.trailerUpload) : Promise.resolve(),
+                  this.subtitlesByParentId(ep._id),
+                  EpisodeModel.findByIdAndDelete(ep._id),
+                ]),
+              ),
+            )
 
             await SeasonModel.findByIdAndDelete(season._id)
           } catch (e) {
@@ -133,7 +140,7 @@ export class Purge {
     ])
 
     if (videoDocument.type === 'series') {
-      this.seasonsByVideoId(videoDocument._id)
+      await this.seasonsByVideoId(videoDocument._id)
     }
   }
 }

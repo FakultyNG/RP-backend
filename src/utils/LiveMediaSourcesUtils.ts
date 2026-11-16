@@ -10,7 +10,12 @@ export class LiveMediaSourcesUtils {
       lives.map(async live => {
         const response = {
           previewVideo: VidUploadUtils.getResSourceUrl(live.previewVideoUploadDoc, quality),
-          stream_url: env.RP_PLAYBACK_URL + live.streamKey + '/index.m3u8',
+          // Paid stream URLs are returned only by the authenticated stream endpoint
+          // after it verifies a successful wallet purchase.
+          stream_url:
+            isClient || live.vidClass === 'free'
+              ? env.RP_PLAYBACK_URL + live.streamKey + '/index.m3u8'
+              : undefined,
           previewVideoUploadDoc: undefined,
         }
 

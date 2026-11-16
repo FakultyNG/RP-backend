@@ -32,7 +32,53 @@ interface CreateAdminNotification extends CreateClientNotification {
   photoFile?: MulterFile
 }
 
+interface CreateStoredAdminNotification extends CreateClientNotification {
+  type?: string
+  metadata?: Record<string, unknown>
+  photo?: {
+    Bucket: string
+    Key: string
+  }
+}
+
 export class NotificationService {
+  static createStoredAdminNotification = async ({
+    currentUser,
+    title,
+    description,
+    type,
+    metadata,
+    photo,
+  }: CreateStoredAdminNotification) => {
+    const adminNotification = await AdminNotificationModel.create({
+      admin: currentUser._id,
+      title,
+      description,
+      type,
+      metadata,
+      photo,
+    })
+
+    const filter: Filter = {
+      _id: { $ne: currentUser._id },
+      role: 'customer',
+    }
+
+    for await (const users of fetchManyUsersByFilterGenerator(filter)) {
+      await Promise.all(
+        users.map(user =>
+          UserNotificationModel.create({
+            adminNotification: adminNotification._id,
+            user: user._id,
+            publisher: 'Admin',
+          }),
+        ),
+      )
+    }
+
+    return adminNotification
+  }
+
   static createClientNotification = async ({
     currentUser,
     title,
@@ -87,38 +133,18 @@ export class NotificationService {
       Key: photoUpload.Key,
     }
 
-    const adminNotification = await AdminNotificationModel.create({
-      admin: currentUser._id,
+    return this.createStoredAdminNotification({
+      currentUser,
       title,
       description,
       photo: photoSchema,
     })
-
-    setTimeout(async () => {
-      const filter: Filter = {
-        _id: { $ne: currentUser._id },
-      }
-
-      for await (const users of fetchManyUsersByFilterGenerator(filter)) {
-        users.forEach(async user => {
-          try {
-            await UserNotificationModel.create({
-              adminNotification: adminNotification._id,
-              user: user._id,
-              publisher: 'Admin',
-            })
-          } catch (e) {
-            console.error('Error creating Customer notification for ')
-          }
-        })
-      }
-    }, 0)
   }
 
   static getUnseenNotifications = async (currentUser: LoggedInUser, query: ExpressRequestQuery) => {
     const { skip, limit } = QueryParamsFeatures.paginagteParams(query)
 
-    const notifications = await NotificationRepo.fetchUnSeenUserNotifications({
+    const notifications = await NotificationRepo.fetchUserNotifications({
       userId: currentUser._id,
       skip,
       limit,

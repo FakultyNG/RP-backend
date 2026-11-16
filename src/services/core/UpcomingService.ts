@@ -18,6 +18,7 @@ import {
 import { Notification } from '../../notifications/notification'
 import { LiveModel } from '../../models/lives.model'
 import { VideoModel } from '../../models/videos.model'
+import { filterGuestLives, filterGuestVods } from '../../utils/guestAccess'
 
 export type CustomerSubScriptionActionType = 'subscribe' | 'unsubscribe'
 
@@ -70,9 +71,9 @@ export class UpcomingService {
   }
 
   static customerFetch = async (currentUser: LoggedInUser, query: ExpressRequestQuery) => {
-    denyGuestUser(currentUser)
     const { videoQuality } = currentUser
-    const { page, limit } = QueryParamsFeatures.paginagteParams(query)
+    const { page, limit: requestedLimit } = QueryParamsFeatures.paginagteParams(query)
+    const limit = Math.min(requestedLimit, 100)
 
     const [vods, lives] = await Promise.all([
       VideoRepo.fetchActiveUpcoming(page, limit),
@@ -84,8 +85,10 @@ export class UpcomingService {
     ])
 
     return {
-      vods: MovieMediaSourcesUtils.resolveMediaSources(vods, videoQuality) || [],
-      lives: lives || [],
+      vods:
+        MovieMediaSourcesUtils.resolveMediaSources(filterGuestVods(vods, currentUser), videoQuality) ||
+        [],
+      lives: filterGuestLives(lives || [], currentUser),
     }
   }
 

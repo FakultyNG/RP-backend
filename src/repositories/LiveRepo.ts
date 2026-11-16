@@ -4,6 +4,7 @@ import { skip } from '../utils/QueryParamsFeatures'
 import { toObjectId } from './VideoRepo'
 import { MongoDBObjectId, WithMongoDBObjectID } from '../types/general'
 import env from '../env'
+import { buildTitleRelevanceStage } from '../utils/SearchRelevance'
 
 type FetchLives = {
   prevStages: PipelineStage[]
@@ -17,8 +18,13 @@ type FetchLives = {
 export class LiveRepo {
   static addFeatured = (id: string, expiry: string) => {
     return LiveModel.findByIdAndUpdate(id, {
-      featured: true,
-      feat_expiry: new Date(expiry),
+      $set: {
+        featured: true,
+        featuredSource: 'manual',
+        featuredAt: new Date(),
+        feat_expiry: new Date(expiry),
+      },
+      $unset: { featuredScore: 1, autoFeaturedBlockedUntil: 1 },
     })
   }
 
@@ -179,7 +185,9 @@ export class LiveRepo {
 
   static fetchActiveUpcoming = async (page: number, limit: number) => {
     return await this.fetchLivesAggr({
-      prevStages: [{ $match: { upcoming: true, active: true } }],
+      prevStages: [{ $match: { start: { $gt: new Date() }, active: true } }],
+      sortStage: { $sort: { start: 1 } },
+      includeOnlyHasPaid: false,
       page,
       limit,
     })
@@ -220,15 +228,55 @@ export class LiveRepo {
             ],
           },
         },
+        buildTitleRelevanceStage(textReg),
       ],
+      sortStage: { $sort: { searchRelevance: 1, engagements: -1, createdAt: -1 } },
       page,
       limit,
     })
   }
 
   static getFeatured = async (page = 1, limit = 10) => {
+    const now = new Date()
     return await this.fetchLivesAggr({
-      prevStages: [{ $match: { featured: true, expired: false } }],
+      prevStages: [
+        {
+          $match: {
+            featured: true,
+            expired: false,
+            $or: [
+              { feat_expiry: { $exists: false } },
+              { feat_expiry: { $gt: now } },
+            ],
+          },
+        },
+        {
+          $set: {
+            featuredPriority: { $cond: [{ $eq: ['$featuredSource', 'automatic'] }, 0, 1] },
+          },
+        },
+      ],
+      sortStage: { $sort: { featuredPriority: -1, featuredScore: -1, engagements: -1 } },
+      page,
+      limit,
+    })
+  }
+
+  static getAdminFeatured = async (page = 1, limit = 50) => {
+    const now = new Date()
+    return await this.fetchLivesAggr({
+      prevStages: [{
+        $match: {
+          featured: true,
+          $or: [
+            { feat_expiry: { $exists: false } },
+            { feat_expiry: { $gt: now } },
+          ],
+        },
+      }],
+      sortStage: { $sort: { feat_expiry: -1, _id: -1 } },
+      excludeExpired: false,
+      includeOnlyHasPaid: false,
       page,
       limit,
     })
@@ -306,7 +354,19 @@ export class LiveRepo {
     includeOnlyHasPaid = true,
   }: FetchLives) => {
     const aggr = LiveModel.aggregate([
-      ...(includeOnlyHasPaid ? [{ $match: { payment_id: { $exists: true } } }] : []),
+      ...(includeOnlyHasPaid
+        ? [
+            {
+              $match: {
+                $or: [
+                  { payment_id: { $exists: true } },
+                  { creator_type: 'admin' },
+                  { creator_type: { $exists: false } },
+                ],
+              },
+            },
+          ]
+        : []),
 
       ...(excludeExpired
         ? [
@@ -417,6 +477,8 @@ export class LiveRepo {
           stream_key: false,
           vid_class: false,
           feat_expiry: false,
+          featuredPriority: false,
+          searchRelevance: false,
           active_views: false,
           client_id: false,
           __v: false,

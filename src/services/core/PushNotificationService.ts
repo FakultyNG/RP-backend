@@ -40,7 +40,12 @@ export class PushNotificationService {
 
     Notification.subscribeToTopic(Notification.adminMainTopic, device_token)
 
-    if (previousDocument == null || previousDocument.user_id.toString() === currentUserId) {
+    if (previousDocument == null) {
+      this._manageTokenSubcriptionTopicsForContent(currentUserId, 'SUBSCRIBE', device_token)
+      return
+    }
+
+    if (previousDocument.user_id.toString() === currentUserId) {
       return
     }
 

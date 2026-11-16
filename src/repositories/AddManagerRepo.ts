@@ -9,7 +9,7 @@ interface FetchManyInput {
 }
 
 export interface FetchAdResult extends Omit<AdSchema, 'videoUpload'> {
-  videoUpload: VideoUploadSchema
+  videoUpload?: VideoUploadSchema
 }
 
 export class AdManagerRepo {
@@ -51,12 +51,34 @@ export class AdManagerRepo {
   }
 
   static fetcRandom = (type: unknown) => {
+    const now = new Date()
+    const hasSpecificType = typeof type === 'string' && type !== 'all'
     const res = AdModel.aggregate([
-      this._typeMatch(type),
+      {
+        $match: {
+          active: true,
+          start: { $lte: now },
+          expiry: { $gt: now },
+          type: hasSpecificType ? type : { $ne: 'home_ad' },
+        },
+      },
+      ...(hasSpecificType ? [] : [this._typeMatch(type)]),
       ...this._pipeline,
-      { $sample: { size: 1 } },
+      // Preserve the random-on-each-request behaviour while returning enough
+      // ads for clients to rotate continuously during the current session.
+      { $sample: { size: 50 } },
     ])
 
     return res as Aggregate<FetchAdResult[]>
+  }
+
+  static fetchHomeAds = () => {
+    const now = new Date()
+    return AdModel.find({
+      type: 'home_ad',
+      active: true,
+      start: { $lte: now },
+      expiry: { $gt: now },
+    }).sort({ createdAt: -1 })
   }
 }

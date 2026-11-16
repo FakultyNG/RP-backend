@@ -19,6 +19,16 @@ const schema = new Schema(
       type: String,
     },
 
+    type: {
+      type: String,
+      default: 'MAIN_ADMIN_TOPIC_NOTIFICATION',
+    },
+
+    metadata: {
+      type: Schema.Types.Mixed,
+      default: {},
+    },
+
     photo: PhotoSchema,
   },
   { timestamps: true, versionKey: false },

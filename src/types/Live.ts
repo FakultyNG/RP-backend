@@ -3,7 +3,8 @@ export interface LiveAggrRes {
   title: string
   streamKey: string
   location: string
-  vid_class: string
+  vidClass: string
+  vid_class?: string
   pg: string
   description: string
   active: boolean

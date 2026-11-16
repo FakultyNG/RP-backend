@@ -4,6 +4,7 @@ import { StringOrObjectId } from '../types'
 import { skip } from '../utils/QueryParamsFeatures'
 import { toObjectId } from './VideoRepo'
 import env from '../env'
+import { getDefaultUserProfileImageUrl } from '../utils/defaultUserProfileImage'
 
 type UserRole = UserSchema['role']
 type UserRoles = Array<UserRole>
@@ -224,7 +225,7 @@ export class UserRepo {
           photo: {
             $cond: {
               if: { $eq: [{ $ifNull: ['$photo', null] }, null] },
-              then: null,
+              then: getDefaultUserProfileImageUrl(),
               else: { $concat: [env.CDN_IMAGES_BASE_URL, '/', '$photo.Key'] },
             },
           },

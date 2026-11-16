@@ -122,22 +122,11 @@ export class AuthenticationService {
     data: Record<string, any>,
     session: MaybeSession,
   ) => {
-    const { first_name, last_name, email, password, cpassword, country_code, mobile } = data
+    const { name, email, password } = data
+    const preferredName = name?.trim()
 
-    if (
-      !first_name ||
-      !last_name ||
-      !email ||
-      !password ||
-      !cpassword ||
-      !country_code ||
-      !mobile
-    ) {
+    if (!preferredName || !email || !password) {
       throw new OperationalError(`All inputs are required.`, 400)
-    }
-
-    if (password !== cpassword) {
-      throw new OperationalError('pasword does not match', 400)
     }
 
     Password.checkIsStrongPasswordOrThrow(password)
@@ -148,27 +137,41 @@ export class AuthenticationService {
     const userDocument = await UserRepo.getByEmail(email)
 
     if (userDocument) {
-      userDocument.auth_code = userDocument.auth_code ?? Number(pin)
+      if (userDocument.role !== 'customer' || userDocument.verified) {
+        throw new OperationalError('An account with this email already exists. Please log in.', 409)
+      }
+
+      userDocument.first_name = preferredName
+      userDocument.last_name = ''
+      userDocument.auth_code = Number(pin)
       userDocument.auth_expiry = pinExpiry
       userDocument.approved = false
       userDocument.verified = false
-      await userDocument.save()
+      await userDocument.save({ session })
+      await SettingsModel.updateOne(
+        { user_id: userDocument._id },
+        { $setOnInsert: { video_quality: '720p' } },
+        { upsert: true, session },
+      )
       await new Email(Email.makeRecepiant(userDocument)).sendVerifyEmail(pin)
       return userDocument.restricted()
     }
 
     const newUserDocument = await new UserModel({
       email,
-      mobile,
-      last_name,
-      first_name,
-      country_code,
+      last_name: '',
+      first_name: preferredName,
       auth_code: pin,
       role: 'customer',
       auth_expiry: pinExpiry,
       password: await Password.encrypt(password),
     }).save({ session })
 
+    await SettingsModel.updateOne(
+      { user_id: newUserDocument._id },
+      { $setOnInsert: { video_quality: '720p' } },
+      { upsert: true, session },
+    )
     await new Email(Email.makeRecepiant(newUserDocument)).sendVerifyEmail(pin)
     return newUserDocument.restricted()
   }

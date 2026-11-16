@@ -3,6 +3,7 @@ import { LoggedInUser } from '../../types'
 import { MovieMediaSourcesUtils } from '../../utils/MovieMediaSourcesUtils'
 import { ExpressRequestQuery, QueryParamsFeatures } from '../../utils/QueryParamsFeatures'
 import { VidUploadUtils } from '../../utils/VideoUploadUtils'
+import { filterGuestVods } from '../../utils/guestAccess'
 
 interface GetVodsByCategoryParams {
   categoryId: string
@@ -26,7 +27,10 @@ export class VideoService {
     const { page, limit } = QueryParamsFeatures.paginagteParams(query)
 
     const vods = await VideoRepo.fetchByCategory(categoryId, page, limit)
-    const hydratedVods = MovieMediaSourcesUtils.resolveMediaSources(vods, currentUser.videoQuality)
+    const hydratedVods = MovieMediaSourcesUtils.resolveMediaSources(
+      filterGuestVods(vods, currentUser),
+      currentUser.videoQuality,
+    )
     return hydratedVods
   }
 }

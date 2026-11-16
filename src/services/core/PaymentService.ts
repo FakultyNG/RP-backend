@@ -623,6 +623,10 @@ export class PaymentService {
     }
 
     if (payment.method === 'wave') {
+      if (!currentUser.country_code || !currentUser.mobile) {
+        throw new OperationalError('A phone number is required for Wave payments', 400)
+      }
+
       const redirectUrl = await WavePayment.accept({
         amount: payment.amount,
         paymentReference: payment._id.toString(),
@@ -670,11 +674,15 @@ export class PaymentService {
     payment: PaymentDocument,
     videoId?: string,
   ) => {
-    if (
-      (payment.currency === 'NGN' && payment.amount < env.NGN_PREMIUM_CONTENT_COST) ||
-      (payment.currency === 'USD' && payment.amount < env.USD_PREMIUM_CONTENT_COST)
-    ) {
-      throw new OperationalError('insufficient payment amount', 403)
+    const expectedAmount =
+      payment.currency === 'NGN'
+        ? env.NGN_PREMIUM_CONTENT_COST
+        : payment.currency === 'USD'
+          ? env.USD_PREMIUM_CONTENT_COST
+          : null
+
+    if (expectedAmount == null || payment.amount !== expectedAmount) {
+      throw new OperationalError('payment amount does not match premium content cost', 403)
     }
 
     const video = await this._getVideoById(videoId)
@@ -743,13 +751,11 @@ export class PaymentService {
     liveId,
     videoId,
   }: HandleWalletPaymentInput) => {
+    let exclusiveLiveClientId: StringOrObjectId | null = null
+
     switch (payment.useCase) {
       case 'live schedule':
-        const liveDocument = await LiveModel.findByIdAndUpdate(
-          liveId,
-          { $set: { payment_id: payment._id } },
-          { session },
-        )
+        const liveDocument = await LiveModel.findById(liveId).session(session ?? null)
 
         if (liveDocument == null) {
           throw new OperationalError('Invalid Live ID', 404)
@@ -763,25 +769,7 @@ export class PaymentService {
 
       case 'live-watch-exclusive':
         const live = await this._validateWatchExclusiveLive(payment, liveId)
-
-        // credit client wallet
-        const clientWallet = await WalletRepo.updateBalance({
-          userId: live.client_id,
-          topUpAmount: payment.amount,
-          currency: payment.currency,
-          session,
-        })
-
-        const isNairaPayment = payment.currency === 'NGN'
-
-        // create client wallet
-        if (clientWallet == null) {
-          await new WalletModel({
-            userId: live.client_id,
-            NGNBalance: isNairaPayment ? payment.amount : 0,
-            USDBalance: isNairaPayment ? 0 : payment.amount,
-          }).save({ session })
-        }
+        exclusiveLiveClientId = live.client_id
         break
 
       case 'video-watch-premium':
@@ -795,25 +783,39 @@ export class PaymentService {
         throw new OperationalError('unsupported wallet payment', 400)
     }
 
-    // debit customer wallet
-    const customerWallet = await WalletRepo.updateBalance({
+    // Debit atomically only when the selected balance can cover the full amount.
+    const customerWallet = await WalletRepo.debitBalance({
       userId: currentUser._id,
-      topUpAmount: payment.amount * -1,
+      amount: payment.amount,
       currency: payment.currency,
       session,
     })
 
     if (customerWallet == null) {
-      throw new OperationalError('customer wallet not found', 404)
-    }
-
-    if (
-      (payment.currency === 'NGN' && customerWallet.NGNBalance < 0) ||
-      (payment.currency === 'USD' && customerWallet.USDBalance < 0)
-    ) {
       throw new OperationalError('insufficient funds', 403)
     }
 
+    if (payment.useCase === 'live schedule') {
+      const scheduledLive = await LiveModel.findOneAndUpdate(
+        { _id: liveId, payment_id: { $exists: false } },
+        { $set: { payment_id: payment._id } },
+        { session },
+      )
+      if (scheduledLive == null) {
+        throw new OperationalError('Already Paid for', 403)
+      }
+    }
+
+    if (exclusiveLiveClientId != null) {
+      await WalletRepo.updateBalance({
+        userId: exclusiveLiveClientId,
+        topUpAmount: payment.amount,
+        currency: payment.currency,
+        session,
+      })
+    }
+
+    payment.status = 'success'
     payment.isUsed = true
     await payment.save({ session })
   }
@@ -837,7 +839,16 @@ export class PaymentService {
   ) => {
     denyGuestUser(currentUser)
 
-    const status = method === 'wallet' ? 'success' : 'pending'
+    const isContentPurchase =
+      useCase === 'video-watch-premium' ||
+      useCase === 'video-watch-exclusive' ||
+      useCase === 'live-watch-exclusive'
+
+    if (isContentPurchase && method !== 'wallet') {
+      throw new OperationalError('paid content must be purchased with the Reeplay wallet', 400)
+    }
+
+    const status = 'pending'
 
     fullName = fullName ?? `${currentUser.first_name} ${currentUser.last_name}`
     email = email?.toLowerCase() ?? currentUser.email
@@ -1106,6 +1117,10 @@ export class PaymentService {
     }
 
     const contentKey = contentType === 'live' ? 'liveId' : 'videoId'
+    const validUseCases: PaymentUseCase[] =
+      contentType === 'live'
+        ? ['live-watch-exclusive']
+        : ['video-watch-premium', 'video-watch-exclusive']
 
     const dateAgo = new Date()
     addDays(dateAgo, -30)
@@ -1114,6 +1129,9 @@ export class PaymentService {
       userId: currentUserId,
       [contentKey]: contentId,
       status: 'success',
+      isUsed: true,
+      method: 'wallet',
+      useCase: { $in: validUseCases },
       updatedAt: { $gt: dateAgo },
     })
 

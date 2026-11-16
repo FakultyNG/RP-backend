@@ -22,6 +22,8 @@ import { superAdminUsersRouter } from './userRouter'
 import { Multer } from '../../utils/Multer'
 import { OnboardingController } from '../../controllers/customers/onboarding.customer'
 import { superAdminNotificationRouter } from './notificationRoute'
+import { superAdminBulkDeleteRouter } from './bulkDeleteRoute'
+import { superAdminPlatformSettingsRouter } from './platformSettingsRoute'
 
 export const superAdminRouter = express.Router()
 
@@ -56,6 +58,8 @@ superAdminRouter.use('/user', superAdminUsersRouter)
 superAdminRouter.use('/dashboard', superAdminDashboardRouter)
 superAdminRouter.use('/ads', superAdminAdsRouter)
 superAdminRouter.use('/notifications', superAdminNotificationRouter)
+superAdminRouter.use('/bulk-delete', superAdminBulkDeleteRouter)
+superAdminRouter.use('/platform-settings', superAdminPlatformSettingsRouter)
 
 superAdminRouter.post(
   '/create-super-admin',

@@ -35,7 +35,7 @@ export class Email {
     const templatePath = path.resolve('src', 'views', `${template}.ejs`)
 
     const html = await ejs.renderFile(templatePath, {
-      name: `${this.firstName}, ${this.lastName}`,
+      name: [this.firstName, this.lastName].filter(Boolean).join(' '),
       pin: pin,
       footerYear: new Date().getFullYear(),
     })
@@ -71,7 +71,7 @@ export class Email {
   async sendVerifyEmail(pin: string) {
     await this.sendMsg({
       template: 'verify-email',
-      subject: 'Welcome On Board',
+      subject: 'Your Reeplay verification code',
       pin,
     })
   }
@@ -79,7 +79,7 @@ export class Email {
   async sendResetPasswordToken(pin: string) {
     await this.sendMsg({
       template: 'reset-pass',
-      subject: 'Reset Password Token',
+      subject: 'Reset your Reeplay password',
       pin,
     })
   }
@@ -87,7 +87,7 @@ export class Email {
   async sendResetPin(pin: string) {
     await this.sendMsg({
       template: 'reset-pin',
-      subject: 'Reset Pin',
+      subject: 'Your new Reeplay PIN',
       pin,
     })
   }
@@ -95,7 +95,7 @@ export class Email {
   async sendAutoRenewSuccess(source: string) {
     await this.sendMsg({
       template: 'autorenew-success',
-      subject: 'Auto Renew Subscription Success',
+      subject: 'Your Reeplay subscription was renewed',
       pin: source,
     })
   }
@@ -103,7 +103,7 @@ export class Email {
   async sendAutoRenewFailure(reason: string) {
     await this.sendMsg({
       template: 'autorenew-fail',
-      subject: 'Auto Renew Subscription Failure',
+      subject: 'Action needed for your Reeplay subscription',
       pin: reason,
     })
   }

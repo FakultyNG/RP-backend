@@ -4,6 +4,7 @@ import { CronTaskHandlers } from './CronTaskHandlers'
 export class CronTasks {
   private _nodeCronTasks: ScheduledTask[] = [
     schedule('*/10 * * * *', CronTaskHandlers.expireFeaturedContents),
+    schedule('* * * * *', CronTaskHandlers.expireLiveEvents),
     schedule('* * * * *', CronTaskHandlers.updateVidUploadsResolutions),
     schedule('0 * * * *', CronTaskHandlers.handle24HourLiveEventPushReminder),
     schedule('0 * * * *', CronTaskHandlers.handleOneHourLiveEventPushReminder),

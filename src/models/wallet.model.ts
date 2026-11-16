@@ -12,16 +12,19 @@ const walletSchema = new Schema(
     NGNBalance: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     USDBalance: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     GMDBalance: {
       type: Number,
       default: 0,
+      min: 0,
     },
   },
   {

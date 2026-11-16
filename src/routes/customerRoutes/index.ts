@@ -26,10 +26,11 @@ import { VODWaitlistRouter } from './VODWaitlistRouter'
 
 import { SharedRoutes } from '../SharedRoutes'
 import { requestValidator } from '../../middlewares/requestValidator'
-import { createCustomerSchema, viewContentSchema } from '../../validations/customers'
+import { contentAnalyticsSchema, createCustomerSchema, viewContentSchema } from '../../validations/customers'
 import { SharedController } from '../../controllers/common/shared.controller'
 import { Multer } from '../../utils/Multer'
 import { notificationRouter } from './notificationRouter'
+import { CustomerAnalyticsController } from '../../controllers/customers/analytics.customer'
 
 export const customerRouter = Router()
 
@@ -51,6 +52,12 @@ customerRouter.get('/pin-reset/:email', OnboardingController.resetPin)
 
 customerRouter.use('/ads', AdsRouter)
 customerRouter.use(AuthMiddleware.authenticateRequest('customer-auth'))
+
+customerRouter.post(
+  '/analytics/events',
+  requestValidator(contentAnalyticsSchema),
+  CustomerAnalyticsController.ingest,
+)
 
 customerRouter.post(
   '/view/content',

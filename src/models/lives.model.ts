@@ -16,6 +16,12 @@ const schema = new Schema(
       sparse: true,
     },
 
+    creator_type: {
+      type: String,
+      enum: ['admin', 'client'],
+      default: 'client',
+    },
+
     title: {
       type: String,
       required: true,
@@ -61,7 +67,7 @@ const schema = new Schema(
 
     vid_class: {
       type: String,
-      enum: ['free', 'ad', 'exclusive'],
+      enum: ['free', 'ad', 'exclusive', 'premium'],
       required: true,
     },
 
@@ -77,6 +83,16 @@ const schema = new Schema(
     active: {
       type: Boolean,
       default: false,
+    },
+
+    publishedAt: {
+      type: Date,
+      default: null,
+    },
+
+    endedAt: {
+      type: Date,
+      default: null,
     },
 
     expired: {
@@ -189,6 +205,15 @@ const schema = new Schema(
       default: false,
     },
 
+    featuredSource: {
+      type: String,
+      enum: ['manual', 'automatic'],
+    },
+
+    featuredAt: Date,
+    featuredScore: Number,
+    autoFeaturedBlockedUntil: Date,
+
     feat_expiry: {
       type: Date,
     },
@@ -231,6 +256,7 @@ const schema = new Schema(
 )
 
 schema.index({ engagements: -1 })
+schema.index({ featured: 1, featuredSource: 1, feat_expiry: 1 })
 schema.index({ expiry: -1 })
 schema.index({ category: 1 })
 schema.index({ views: 1 })

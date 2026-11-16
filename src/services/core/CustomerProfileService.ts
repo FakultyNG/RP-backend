@@ -3,6 +3,7 @@ import { SuggestionModel } from '../../models/suggestions.model'
 import { UserModel } from '../../models/users.model'
 import { LoggedInUser, StringOrObjectId } from '../../types'
 import { denyGuestUser } from '../../utils/denyGuestUser'
+import { getDefaultUserProfileImageUrl } from '../../utils/defaultUserProfileImage'
 import { OperationalError } from '../../utils/OperationalError'
 
 interface FetchCustomerProfileInput {
@@ -119,7 +120,7 @@ export class CustomerProfileService {
       return {
         data: {
           profile: null,
-          photo_url: 'no profile picture',
+          photo_url: getDefaultUserProfileImageUrl(),
         },
         message: 'Customer profile fetched but no profile data',
       }
@@ -131,7 +132,7 @@ export class CustomerProfileService {
       return {
         data: {
           profile: profile[0],
-          photo_url: 'no profile picture',
+          photo_url: getDefaultUserProfileImageUrl(),
         },
         message: 'Client profile fetched',
       }

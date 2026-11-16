@@ -4,3 +4,4 @@ import { AdsController } from '../../controllers/common/ad.controller'
 export const router = Router()
 
 router.get('/random', AdsController.fetchRandom)
+router.get('/home', AdsController.fetchHomeAds)

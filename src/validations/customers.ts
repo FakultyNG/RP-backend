@@ -3,24 +3,16 @@ import { MONGO_DB_OBJECT_ID_SCHEMA, STRING_SCHEMA } from './common'
 
 export const createCustomerSchema = {
   body: Joi.object({
-    first_name: STRING_SCHEMA.required(),
-    last_name: STRING_SCHEMA.required(),
+    name: STRING_SCHEMA.trim().min(1).max(80).required(),
     email: STRING_SCHEMA.email().required(),
     password: STRING_SCHEMA.required(),
-    cpassword: STRING_SCHEMA.required(),
-    country_code: STRING_SCHEMA.required(),
-    mobile: STRING_SCHEMA.required(),
-    verified: Joi.boolean(),
-    gender: STRING_SCHEMA.valid('male', 'female', 'nil'),
-    dob: STRING_SCHEMA.isoDate(),
-    country: STRING_SCHEMA,
   }),
 }
 
 export const fetchUpcomingSchema = {
   query: Joi.object({
-    page: Joi.number(),
-    limit: Joi.number(),
+    page: Joi.number().integer().min(1),
+    limit: Joi.number().integer().min(1).max(100),
   }),
 }
 
@@ -76,7 +68,27 @@ export const updateRatingSchema = {
 export const viewContentSchema = {
   body: Joi.object({
     content: MONGO_DB_OBJECT_ID_SCHEMA.required(),
-    contentType: STRING_SCHEMA.valid('vod', 'episode', 'live', 'trailer').required(),
+    contentType: STRING_SCHEMA.valid('vod', 'episode', 'live').required(),
+  }),
+}
+
+const analyticsEventSchema = Joi.object({
+  eventId: STRING_SCHEMA.max(120).required(),
+  sessionId: STRING_SCHEMA.max(120).required(),
+  contentId: MONGO_DB_OBJECT_ID_SCHEMA.required(),
+  contentType: STRING_SCHEMA.valid('vod', 'episode', 'live').required(),
+  eventType: STRING_SCHEMA.valid('play_start', 'progress', 'complete', 'share').required(),
+  positionSeconds: Joi.number().min(0).max(24 * 60 * 60),
+  durationSeconds: Joi.number().min(0).max(24 * 60 * 60),
+  watchedSeconds: Joi.number().min(0).max(60),
+  completionPercent: Joi.number().min(0).max(100),
+  shareDestination: STRING_SCHEMA.max(40),
+  occurredAt: Joi.date().iso(),
+})
+
+export const contentAnalyticsSchema = {
+  body: Joi.object({
+    events: Joi.array().items(analyticsEventSchema).min(1).max(50).required(),
   }),
 }
 

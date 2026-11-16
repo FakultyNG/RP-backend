@@ -1,14 +1,44 @@
 import { Catch } from '../../utils/Catch'
 import { sendResponse } from '../../utils/responder'
-import { AdManagerService, CreateAdData } from '../../services/core/AdmanagerService'
+import {
+  AdManagerService,
+  CreateAdData,
+  CreateHomeAdData,
+} from '../../services/core/AdmanagerService'
 import { OperationalError } from '../../utils/OperationalError'
 import { UploadMediaUtils } from '../../utils/UploadMediaUtils'
 import { validate } from '../../middlewares/requestValidator'
-import { createAdSchema } from '../../validations/admin'
+import { createAdSchema, createHomeAdSchema } from '../../validations/admin'
 import { GetDefined } from '../../utils/GetDefined'
 import { UserSchema } from '../../models/users.model'
 
 export class AdsController {
+  static createHomeAd = Catch.async(async (req, res) => {
+    if (!req.file) {
+      throw new OperationalError('One horizontal poster is required', 400)
+    }
+
+    const data: CreateHomeAdData = {
+      title: req.body.title,
+      link: req.body.link,
+      imageFile: req.file,
+    }
+    validate(createHomeAdSchema, data)
+    const ad = await AdManagerService.createHomeAd(data)
+
+    sendResponse({
+      res,
+      statusCode: 201,
+      message: `${ad.title} added to Home-Ads`,
+      data: ad,
+    })
+  })
+
+  static fetchHomeAds = Catch.async(async (_req, res) => {
+    const ads = await AdManagerService.getHomeAds()
+    sendResponse({ res, data: ads, message: 'Home-Ads fetched' })
+  })
+
   static create = Catch.async(async (req, res) => {
     if (req.body.data == null || typeof req.body.data !== 'string') {
       throw new OperationalError(

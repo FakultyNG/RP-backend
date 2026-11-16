@@ -1,5 +1,5 @@
 import { Catch } from '../../utils/Catch'
-import { handleRTMPStreamPublish } from '../../utils/live'
+import { handleRTMPStreamPublish, handleRTMPStreamPublishDone } from '../../utils/live'
 import { OperationalError } from '../../utils/OperationalError'
 
 export class LivestreamCntroller {
@@ -9,6 +9,16 @@ export class LivestreamCntroller {
       res.sendStatus(200)
     } catch (e) {
       console.error('onNginxPublishStart Error', e instanceof OperationalError ? e.message : e)
+      res.sendStatus(500)
+    }
+  })
+
+  static handleRTMPLivestreamOnPublishDone = Catch.async(async ({ body }, res) => {
+    try {
+      await handleRTMPStreamPublishDone(body.name)
+      res.sendStatus(200)
+    } catch (e) {
+      console.error('onNginxPublishDone Error', e instanceof OperationalError ? e.message : e)
       res.sendStatus(500)
     }
   })

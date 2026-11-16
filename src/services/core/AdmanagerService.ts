@@ -9,10 +9,17 @@ import { Purge } from '../../utils/Purge'
 import { VideoQuality, VidUploadUtils } from '../../utils/VideoUploadUtils'
 import { MediaAccess } from '../media-access'
 import { UploadMediaUtils } from '../../utils/UploadMediaUtils'
+import { CategoryEnumService } from './CategoryEnumsService'
 
 export interface CreateAdData
   extends Omit<AdSchema, 'createdAt' | 'updatedAt' | 'video' | 'photo'> {
   videoFile: MulterFile
+  imageFile: MulterFile
+}
+
+export interface CreateHomeAdData {
+  title: string
+  link: string
   imageFile: MulterFile
 }
 
@@ -26,7 +33,9 @@ export class AdManagerService {
   protected static _resolveMediaSources = (ads: FetchAdResult[], quality?: VideoQuality) => {
     return ads.map(ad => {
       const photoUrl = MediaAccess.getImageAndSubtitleURL(ad.photo.Key)
-      const videoUrl = VidUploadUtils.getResSourceUrl(ad.videoUpload, quality ?? '720p')
+      const videoUrl = ad.videoUpload
+        ? VidUploadUtils.getResSourceUrl(ad.videoUpload, quality ?? '720p')
+        : undefined
 
       return Object.assign(ad, {
         photoUrl,
@@ -41,7 +50,7 @@ export class AdManagerService {
 
   protected static _uploadMedia = async ({ videoFile, imageFile, expire }: UploadMediaInput) => {
     const [imageUploadResult, videoUploadResult] = await Promise.allSettled([
-      MediaManagement.storeImageAndSubtitle(imageFile, expire),
+      MediaManagement.storeImageAndSubtitle(imageFile, expire, 'landscape-poster'),
       MediaManagement.uploadAndInitiateMediaConvert(videoFile, expire),
     ])
 
@@ -61,6 +70,46 @@ export class AdManagerService {
 
   static create = async (data: CreateAdData) =>
     await withMongoDBSession(this._createTransaction, data)
+
+  static createHomeAd = async ({ title, link, imageFile }: CreateHomeAdData) => {
+    await CategoryEnumService.ensurePremiumAdsCategory()
+
+    const imageUpload = await MediaManagement.storeImageAndSubtitle(
+      imageFile,
+      undefined,
+      'landscape-poster',
+    )
+
+    return await AdModel.create({
+      title,
+      type: 'home_ad',
+      brand: 'Home-Ads',
+      link,
+      cta: 'Learn More',
+      duration: 0,
+      start: new Date(),
+      expiry: new Date('2099-12-31T23:59:59.999Z'),
+      active: true,
+      photo: {
+        Bucket: imageUpload.Bucket,
+        Key: imageUpload.Key,
+      },
+    })
+  }
+
+  static getHomeAds = async () => {
+    const ads = await AdManagerRepo.fetchHomeAds()
+    return ads.map(ad => ({
+      _id: ad._id,
+      title: ad.title,
+      type: ad.type,
+      link: ad.link,
+      active: ad.active,
+      photoUrl: MediaAccess.getImageAndSubtitleURL(ad.photo.Key),
+      createdAt: ad.createdAt,
+      updatedAt: ad.updatedAt,
+    }))
+  }
 
   static _createTransaction = async (
     {
@@ -136,6 +185,8 @@ export class AdManagerService {
     }
 
     MediaManagement.deleteObject(deletedAdDocument.photo.Key, deletedAdDocument.photo.Bucket)
-    Purge.videoUploadById(deletedAdDocument.videoUpload)
+    if (deletedAdDocument.videoUpload) {
+      Purge.videoUploadById(deletedAdDocument.videoUpload)
+    }
   }
 }
