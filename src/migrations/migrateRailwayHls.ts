@@ -59,6 +59,25 @@ const syncDocumentStatus = async (document: VideoUpload) => {
 
 const submitDocument = async (document: VideoUpload) => {
   try {
+    if (!(await S3.objectExists(document.key))) {
+      const legacyCandidates = [...document.resolutions].sort(
+        (left, right) => Number(right.resolution) - Number(left.resolution),
+      )
+      let recoveredFrom: string | null = null
+      for (const candidate of legacyCandidates) {
+        if (await S3.objectExists(candidate.key)) {
+          recoveredFrom = candidate.key
+          break
+        }
+      }
+
+      if (!recoveredFrom) {
+        throw new Error('Original upload and legacy MP4 renditions are missing')
+      }
+
+      await S3.copyObject(recoveredFrom, document.key)
+    }
+
     const job = await MediaConvert.transcode(document.key)
     await updateHlsFields(document, {
       hlsKey: MediaConvert.getHlsMasterKey(document.key),

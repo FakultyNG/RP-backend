@@ -4,6 +4,7 @@ import { AwsUtils } from './utils'
 import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
+  CopyObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsCommand,
@@ -49,6 +50,19 @@ export class S3 {
       throw error
     }
   }
+
+  static copyObject = async (
+    sourceKey: string,
+    destinationKey: string,
+    Bucket = AwsUtils.buckets.reeplay,
+  ) =>
+    AwsUtils.clients.s3.send(
+      new CopyObjectCommand({
+        Bucket,
+        Key: destinationKey,
+        CopySource: `${Bucket}/${encodeURIComponent(sourceKey).replace(/%2F/g, '/')}`,
+      }),
+    )
 
   static listKeys = async (Prefix: string, Bucket = AwsUtils.buckets.reeplay) => {
     const keys: string[] = []
