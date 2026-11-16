@@ -27,5 +27,9 @@ export class AwsUtils {
     get transcodeOutput() {
       return `s3://${this.reeplay}/transcode/`
     },
+
+    get railwayHlsOutput() {
+      return `s3://${this.reeplay}/railway-hls/`
+    },
   }
 }

@@ -41,6 +41,11 @@ export const env = getValidEnv({
   MONGO_DB_NAME: process.env.MONGO_DB_NAME ?? 'reeplayDB',
   NODE_ENV: process.env.NODE_ENV,
   ENABLE_CRON: setToBooleanWithDefault('ENABLE_CRON', false),
+  PUBLIC_APP_ORIGIN:
+    process.env.PUBLIC_APP_ORIGIN ??
+    (process.env.RAILWAY_PUBLIC_DOMAIN
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+      : 'https://reeplay-api-ts-production.up.railway.app'),
 
   // emails
   MAIL_SENDER: process.env.MAIL_SENDER,
@@ -66,6 +71,8 @@ export const env = getValidEnv({
   S3SECRET_KEY: process.env.S3SECRET_KEY,
   S3ACCESS_KEY: process.env.S3ACCESS_KEY,
   IAM_ROLE_ARN: process.env.IAM_ROLE_ARN,
+  RAILWAY_MEDIACONVERT_QUEUE_ARN: process.env.RAILWAY_MEDIACONVERT_QUEUE_ARN ?? '',
+  RAILWAY_MEDIACONVERT_JOB_TEMPLATE: process.env.RAILWAY_MEDIACONVERT_JOB_TEMPLATE ?? '',
   CDN_IMAGES_BASE_URL: process.env.CDN_IMAGES_BASE_URL,
 
   S3_IMAGE_BUCKET: process.env.S3_IMAGE_BUCKET,

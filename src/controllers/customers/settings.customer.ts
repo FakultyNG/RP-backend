@@ -4,6 +4,32 @@ import { sendResponse } from '../../utils/responder'
 import { CustomerSettingsService } from '../../services/core/CustomerSettingsService'
 
 export class CustomerSettingsController {
+  static replaceInterests = Catch.async(async ({ user, body }, res) => {
+    const data = await CustomerSettingsService.replaceInterests(
+      GetDefined.loggedInUser(user),
+      body,
+    )
+
+    sendResponse({
+      res,
+      data,
+      message: 'interest preferences updated',
+    })
+  })
+
+  static videoQuality = Catch.async(async ({ user, body: { video_quality } }, res) => {
+    const data = await CustomerSettingsService.setVideoQuality(
+      GetDefined.loggedInUser(user),
+      video_quality,
+    )
+
+    sendResponse({
+      res,
+      data,
+      message: 'video quality updated',
+    })
+  })
+
   static notificationSettings = Catch.async(async ({ user, body }, res) => {
     await CustomerSettingsService.setNotificationSettings(GetDefined.loggedInUser(user), body)
 

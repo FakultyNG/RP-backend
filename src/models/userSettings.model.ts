@@ -12,6 +12,14 @@ const settingsSchema = new Schema(
       type: [String],
       lowercase: true,
     },
+    interest_genres: [{
+      type: Schema.Types.ObjectId,
+      ref: 'genre_enums',
+    }],
+    interest_categories: [{
+      type: Schema.Types.ObjectId,
+      ref: 'category_enums',
+    }],
     watchlist: {
       type: [String],
       lowercase: true,
@@ -19,7 +27,8 @@ const settingsSchema = new Schema(
     video_quality: {
       type: String,
       lowercase: true,
-      enum: ['480p', '720p', '1080p'],
+      enum: ['automatic', '480p', '720p', '1080p'],
+      default: 'automatic',
     },
     //Notification Settings
     allow_notifications: {

@@ -27,6 +27,7 @@ export class SharedRoutes {
     const vodsRouter = Router()
 
     vodsRouter.get('/suggestions', SharedController.randomSuggestions)
+    vodsRouter.get('/personalized', SharedController.getPersonalizedVods)
     vodsRouter.get('/category/:catId', SharedController.fetchVidsForCategory)
     vodsRouter.get('/similar-by-cast/:castId', SharedController.getSimilarByCastId)
     vodsRouter.get('/seasons/:vidId', AdminUploadController.fetchSeasonsAndEpisodes)

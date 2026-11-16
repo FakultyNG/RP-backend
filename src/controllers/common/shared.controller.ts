@@ -35,6 +35,7 @@ import {
 import { ViewService } from '../../services/core/ViewService'
 import { AutoFeaturedService } from '../../services/core/AutoFeaturedService'
 import { isYouTubeUrl } from '../../utils/youtube'
+import { PersonalizedContentService } from '../../services/core/PersonalizedContentService'
 
 export type PaymentHistoryCaller = {
   caller: 'Admin' | 'Others'
@@ -56,6 +57,31 @@ type LiveEventsType =
   | 'podcasts popular'
 
 export class SharedController extends UploadMediaUtils {
+  static getPersonalizedVods = Catch.async(async ({ query, user }, res) => {
+    const currentUser = GetDefined.loggedInUser(user)
+    const { page, limit } = QueryParamsFeatures.paginagteParams(query)
+    const splitIds = (value: unknown) =>
+      typeof value === 'string' ? value.split(',').filter(Boolean).slice(0, 7) : []
+    const vods = await PersonalizedContentService.getRecommendations(
+      currentUser,
+      {
+        genreIds: splitIds(query.genreIds),
+        categoryIds: splitIds(query.categoryIds),
+      },
+      page,
+      limit,
+    )
+
+    sendResponse({
+      res,
+      data: MovieMediaSourcesUtils.resolveMediaSources(
+        filterGuestVods(vods, currentUser),
+        currentUser.videoQuality,
+      ),
+      message: 'personalized contents fetched successfully',
+    })
+  })
+
   static getVodDetailsById = Catch.async(async ({ params, user }, res) => {
     const currentUser = GetDefined.loggedInUser(user)
     const videos = filterGuestVods(await VideoRepo.fetchById(params.vodId), currentUser)
@@ -83,8 +109,17 @@ export class SharedController extends UploadMediaUtils {
     const { page, limit } = QueryParamsFeatures.paginagteParams(req.query)
     const user = GetDefined.loggedInUser(req.user)
     const { videoQuality } = user
-
-    const videoDocuments = await VideoRepo.fetchFromLatest(page, limit)
+    const splitIds = (value: unknown) =>
+      typeof value === 'string' ? value.split(',').filter(Boolean).slice(0, 7) : []
+    const videoDocuments = await PersonalizedContentService.getRecommendations(
+      user,
+      {
+        genreIds: splitIds(req.query.genreIds),
+        categoryIds: splitIds(req.query.categoryIds),
+      },
+      page,
+      limit,
+    )
 
     sendResponse({
       res,

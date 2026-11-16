@@ -406,7 +406,15 @@ export class LiveRepo {
           as: 'previewVideoUploads',
           pipeline: [
             { $match: { isTranscoded: true } },
-            { $project: { key: true, isTranscoded: true, resolutions: true } },
+            {
+              $project: {
+                key: true,
+                isTranscoded: true,
+                resolutions: true,
+                hlsKey: true,
+                hlsStatus: true,
+              },
+            },
           ],
         },
       },

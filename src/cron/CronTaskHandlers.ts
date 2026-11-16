@@ -18,6 +18,7 @@ import {
 import { Notification } from '../notifications/notification'
 import { formatTimeWithTimezone } from '../utils/date'
 import { LiveViewerPresenceModel } from '../models/liveViewerPresence.model'
+import { MediaConvert } from '../services/aws/mediaConvert'
 
 export class CronTaskHandlers {
   protected static checkTranscodedParentDocumentOrThrow = (
@@ -113,14 +114,26 @@ export class CronTaskHandlers {
 
   protected static _updateVideoUploadDoc = async (document: VideoUpload) => {
     try {
-      const resolutions = await S3.setResolutionsPairs(document.key)
-      document.resolutions = resolutions as any
-      document.isTranscoded = !!resolutions.length
-
-      if (!document.isTranscoded) {
+      if (!document.hlsKey) {
         return
       }
 
+      document.isTranscoded = await S3.objectExists(document.hlsKey)
+
+      if (!document.isTranscoded) {
+        if (document.hlsJobId) {
+          const job = await MediaConvert.getJob(document.hlsJobId)
+          if (job?.Status === 'ERROR' || job?.Status === 'CANCELED') {
+            document.hlsStatus = 'failed'
+            document.hlsError = job.ErrorMessage ?? `MediaConvert job ${job.Status.toLowerCase()}`
+            await document.save()
+          }
+        }
+        return
+      }
+
+      document.hlsStatus = 'ready'
+      document.hlsError = null
       await this._updateTranscodedDocumentParent(document)
       await document.save()
     } catch (error) {

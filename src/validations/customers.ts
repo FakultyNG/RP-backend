@@ -25,6 +25,30 @@ export const subscriptionSchema = {
 
 export const isSubscribedSchema = subscriptionSchema
 
+export const videoQualitySchema = {
+  body: Joi.object({
+    video_quality: STRING_SCHEMA.valid('automatic', '480p', '720p', '1080p').required(),
+  }),
+}
+
+const INTEREST_IDS = Joi.array()
+  .items(Joi.string().hex().length(24))
+  .unique()
+  .max(7)
+  .default([])
+
+export const interestPreferencesSchema = {
+  body: Joi.object({
+    genreIds: INTEREST_IDS,
+    categoryIds: INTEREST_IDS,
+  }).custom((value, helpers) => {
+    if (value.genreIds.length + value.categoryIds.length > 7) {
+      return helpers.error('array.max', { limit: 7 })
+    }
+    return value
+  }),
+}
+
 export const createCommentSchema = {
   body: Joi.object({
     message: STRING_SCHEMA.required(),

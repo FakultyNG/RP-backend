@@ -12,6 +12,7 @@ import env from './env'
 import { Catch } from './utils/Catch'
 import { OperationalError } from './utils/OperationalError'
 import { S3 } from './services/aws/s3'
+import { MediaAccess } from './services/media-access'
 
 const devTestRoute = (_: Request, res: Response) => {
   res.status(200).json({
@@ -82,6 +83,15 @@ export const reeplayApp = () => {
 
       const bytes = await image.Body.transformToByteArray()
       res.send(Buffer.from(bytes))
+    }),
+  )
+  app.get(
+    '/media/hls/:token',
+    Catch.async(async (req, res) => {
+      const manifest = await MediaAccess.getHlsManifest(req.params.token)
+      res.type('application/vnd.apple.mpegurl')
+      res.setHeader('Cache-Control', 'private, no-store')
+      res.send(manifest)
     }),
   )
   app.get('/openapi.json', (_, res) => res.sendFile(openApiPath))

@@ -28,7 +28,15 @@ export class UpcomingRepo {
 
                 pipeline: [
                   { $match: { isTranscoded: true } },
-                  { $project: { key: true, isTranscoded: true, resolutions: true } },
+                  {
+                    $project: {
+                      key: true,
+                      isTranscoded: true,
+                      resolutions: true,
+                      hlsKey: true,
+                      hlsStatus: true,
+                    },
+                  },
                 ],
               },
             },

@@ -333,6 +333,8 @@ export class VideoRepo {
                     $project: {
                       parentType: true,
                       resolutions: true,
+                      hlsKey: true,
+                      hlsStatus: true,
                     },
                   },
                   {
@@ -448,6 +450,8 @@ export class VideoRepo {
               $project: {
                 parentType: true,
                 resolutions: true,
+                hlsKey: true,
+                hlsStatus: true,
               },
             },
             {
@@ -656,6 +660,14 @@ export class VideoRepo {
       limit,
     })
   }
+  static fetchPersonalizedCandidates = (limit = 100) => {
+    return this.fetchVideoAggr({
+      prevStages: [{ $match: { active: true } }],
+      sortStage: { $sort: { engagements: -1, viewsCount: -1, createdAt: -1 } },
+      page: 1,
+      limit: Math.min(Math.max(limit, 20), 100),
+    })
+  }
   static fetchRandom = (limit = 3) => {
     return this.fetchVideoAggr({
       prevStages: [{ $sample: { size: limit * 2 } }],
@@ -718,6 +730,8 @@ export interface VodCardResponse {
 
 export interface VideoUpload {
   resolutions: Resolution[]
+  hlsKey?: string | null
+  hlsStatus?: 'pending' | 'processing' | 'ready' | 'failed'
 }
 
 interface Resolution {

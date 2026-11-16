@@ -5,10 +5,86 @@ import { OperationalError } from '../../utils/OperationalError'
 import { MaybeSession, withMongoDBSession } from '../../utils/mongoDbSessionRunner'
 import { denyGuestUser } from '../../utils/denyGuestUser'
 import { UserModel } from '../../models/users.model'
+import { VideoQuality } from '../../utils/VideoUploadUtils'
+import { Types } from 'mongoose'
+import { GenreEnumModel } from '../../models/genreEnum.model'
+import { CategoryEnumModel } from '../../models/categoryEnum.model'
 
 type PushPull = 'pull' | 'push'
 
+type InterestPreferences = {
+  genreIds?: string[]
+  categoryIds?: string[]
+}
+
 export class CustomerSettingsService {
+  static replaceInterests = async (
+    currentUser: LoggedInUser,
+    preferences: InterestPreferences,
+  ) => {
+    denyGuestUser(currentUser)
+
+    const genreIds = [...new Set(preferences.genreIds ?? [])]
+    const categoryIds = [...new Set(preferences.categoryIds ?? [])]
+    if (genreIds.length + categoryIds.length > 7) {
+      throw new OperationalError('Choose no more than 7 interests', 400)
+    }
+
+    const [genreCount, categoryCount] = await Promise.all([
+      GenreEnumModel.countDocuments({ _id: { $in: genreIds.map(id => new Types.ObjectId(id)) } }),
+      CategoryEnumModel.countDocuments({
+        _id: { $in: categoryIds.map(id => new Types.ObjectId(id)) },
+      }),
+    ])
+    if (genreCount !== genreIds.length || categoryCount !== categoryIds.length) {
+      throw new OperationalError('One or more selected interests no longer exist', 400)
+    }
+
+    const settings = await SettingsModel.findOneAndUpdate(
+      { user_id: currentUser._id },
+      {
+        $set: {
+          interest: [],
+          interest_genres: genreIds,
+          interest_categories: categoryIds,
+        },
+      },
+      { upsert: true, new: true },
+    ).select('interest interest_genres interest_categories')
+
+    return {
+      genreIds: settings.interest_genres.map(id => id.toString()),
+      categoryIds: settings.interest_categories.map(id => id.toString()),
+    }
+  }
+
+  static setVideoQuality = async (
+    currentUser: LoggedInUser,
+    videoQuality: VideoQuality,
+  ) => {
+    denyGuestUser(currentUser)
+
+    await withMongoDBSession(
+      async (_, session) => {
+        await Promise.all([
+          SettingsModel.findOneAndUpdate(
+            { user_id: currentUser._id },
+            { $set: { video_quality: videoQuality } },
+            { upsert: true, new: true, session },
+          ),
+          UserModel.findByIdAndUpdate(
+            currentUser._id,
+            { $set: { videoQuality } },
+            { session },
+          ),
+        ])
+      },
+      undefined,
+    )
+
+    return { video_quality: videoQuality }
+  }
+
   static pushInterest = async (currentUser: LoggedInUser, interest: string) => {
     if ((currentUser.role as string) === 'guest') {
       throw new OperationalError('you are not authenticated', 403)

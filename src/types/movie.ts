@@ -34,6 +34,8 @@ interface TrailerVideoUpload {
   key: string
   isTranscoded: boolean
   resolutions: Resolution[]
+  hlsKey?: string | null
+  hlsStatus?: 'pending' | 'processing' | 'ready' | 'failed'
 }
 
 export interface Resolution {

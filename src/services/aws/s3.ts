@@ -1,7 +1,14 @@
 import { Upload } from '@aws-sdk/lib-storage'
 import { Options } from '@aws-sdk/lib-storage/dist-types'
 import { AwsUtils } from './utils'
-import { DeleteObjectCommand, GetObjectCommand, ListObjectsCommand } from '@aws-sdk/client-s3'
+import {
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  ListObjectsCommand,
+  ListObjectsV2Command,
+} from '@aws-sdk/client-s3'
 import { VideoUploadSchema } from '../../models/videoupload.model'
 
 export class S3 {
@@ -21,6 +28,54 @@ export class S3 {
       Bucket: AwsUtils.buckets.replayImages,
     })
     return AwsUtils.clients.s3.send(command)
+  }
+
+  static getVideoObject = async (Key: string) => {
+    const command = new GetObjectCommand({
+      Key,
+      Bucket: AwsUtils.buckets.reeplay,
+    })
+    return AwsUtils.clients.s3.send(command)
+  }
+
+  static objectExists = async (Key: string, Bucket = AwsUtils.buckets.reeplay) => {
+    try {
+      await AwsUtils.clients.s3.send(new HeadObjectCommand({ Key, Bucket }))
+      return true
+    } catch (error: any) {
+      if (error?.$metadata?.httpStatusCode === 404 || error?.name === 'NotFound') {
+        return false
+      }
+      throw error
+    }
+  }
+
+  static listKeys = async (Prefix: string, Bucket = AwsUtils.buckets.reeplay) => {
+    const keys: string[] = []
+    let ContinuationToken: string | undefined
+
+    do {
+      const response = await AwsUtils.clients.s3.send(
+        new ListObjectsV2Command({ Bucket, Prefix, ContinuationToken }),
+      )
+      response.Contents?.forEach(object => object.Key && keys.push(object.Key))
+      ContinuationToken = response.IsTruncated ? response.NextContinuationToken : undefined
+    } while (ContinuationToken)
+
+    return keys
+  }
+
+  static deleteObjects = async (keys: string[], Bucket = AwsUtils.buckets.reeplay) => {
+    for (let index = 0; index < keys.length; index += 1000) {
+      const Objects = keys.slice(index, index + 1000).map(Key => ({ Key }))
+      if (!Objects.length) continue
+      await AwsUtils.clients.s3.send(
+        new DeleteObjectsCommand({
+          Bucket,
+          Delete: { Objects, Quiet: true },
+        }),
+      )
+    }
   }
 
   static getTranscodedKeysFromInputKey = async (inputKey: string) => {

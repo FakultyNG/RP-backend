@@ -1,0 +1,41 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadReeplaySourceVideos",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:GetObjectVersion"
+      ],
+      "Resource": "arn:aws:s3:::reeplay/*"
+    },
+    {
+      "Sid": "WriteRailwayHlsOutputs",
+      "Effect": "Allow",
+      "Action": [
+        "s3:AbortMultipartUpload",
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::reeplay/railway-hls/*"
+    },
+    {
+      "Sid": "ReadReeplayBucketMetadata",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetBucketLocation",
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::reeplay",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": [
+            "*",
+            "railway-hls/*"
+          ]
+        }
+      }
+    }
+  ]
+}

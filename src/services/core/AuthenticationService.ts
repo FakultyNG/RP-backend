@@ -94,7 +94,7 @@ export class AuthenticationService {
     try {
       await SettingsModel.create({
         user_id: newUserId,
-        video_quality: '720p',
+        video_quality: 'automatic',
       })
     } catch (e) {
       console.error('Error in creating settings for new user', newUserId)
@@ -150,7 +150,7 @@ export class AuthenticationService {
       await userDocument.save({ session })
       await SettingsModel.updateOne(
         { user_id: userDocument._id },
-        { $setOnInsert: { video_quality: '720p' } },
+        { $setOnInsert: { video_quality: 'automatic' } },
         { upsert: true, session },
       )
       await new Email(Email.makeRecepiant(userDocument)).sendVerifyEmail(pin)
@@ -169,7 +169,7 @@ export class AuthenticationService {
 
     await SettingsModel.updateOne(
       { user_id: newUserDocument._id },
-      { $setOnInsert: { video_quality: '720p' } },
+      { $setOnInsert: { video_quality: 'automatic' } },
       { upsert: true, session },
     )
     await new Email(Email.makeRecepiant(newUserDocument)).sendVerifyEmail(pin)

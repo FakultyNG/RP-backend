@@ -13,6 +13,7 @@ import { Password } from '../../utils/Password'
 import { S3 } from '../aws/s3'
 import { AuthHeaderKey } from '../../middlewares/auth'
 import { UpdateQuery } from 'mongoose'
+import { VidUploadUtils } from '../../utils/VideoUploadUtils'
 
 type UserProfileUpdate = {
   userId: string
@@ -69,15 +70,15 @@ export class MediaService {
         ? recentSetting.video_quality
         : isGuestUser(currentUser)
           ? '480p'
-          : '720p'
+          : 'automatic'
 
-    const vidUploadRes = vidUpload.resolutions.find(r => r.key.endsWith(`${vidQuality}.mp4`))
+    const streamUrl = VidUploadUtils.getResSourceUrl(vidUpload, vidQuality)
 
-    if (vidUploadRes == null) {
+    if (streamUrl == null) {
       throw new OperationalError('something went wrong', 500)
     }
 
-    response.streamUrl = MediaAccess.getSignedVideoURL(vidUploadRes.key)
+    response.streamUrl = streamUrl
     return response
   }
 

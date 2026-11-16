@@ -5,305 +5,251 @@ import {
   CreateJobCommandInput,
   GetJobCommand,
   ListJobsCommand,
+  Output,
 } from '@aws-sdk/client-mediaconvert'
 
 import { AwsUtils } from './utils'
 import env from '../../env'
 
+export const RAILWAY_HLS_PREFIX = 'railway-hls'
+export const RAILWAY_HLS_MASTER_NAME = 'master.m3u8'
+
 export const delay = (timeMS: number) => new Promise(res => setTimeout(res, timeMS))
 
+type HlsRendition = {
+  width: number
+  height: number
+  maxBitrate: number
+  nameModifier: '_480p' | '_720p' | '_1080p'
+}
+
+const createHlsOutput = ({
+  width,
+  height,
+  maxBitrate,
+  nameModifier,
+}: HlsRendition): Output => ({
+  ContainerSettings: {
+    Container: 'M3U8',
+    M3u8Settings: {
+      AudioFramesPerPes: 4,
+      PcrControl: 'PCR_EVERY_PES_PACKET',
+      PmtPid: 480,
+      PrivateMetadataPid: 503,
+      ProgramNumber: 1,
+      PatInterval: 0,
+      PmtInterval: 0,
+      Scte35Source: 'NONE',
+      TimedMetadata: 'NONE',
+      VideoPid: 481,
+      AudioPids: [482, 483, 484, 485, 486, 487, 488, 489, 490, 491, 492],
+    },
+  },
+  VideoDescription: {
+    Width: width,
+    Height: height,
+    ScalingBehavior: 'FIT',
+    Sharpness: 50,
+    AntiAlias: 'ENABLED',
+    CodecSettings: {
+      Codec: 'H_264',
+      H264Settings: {
+        RateControlMode: 'QVBR',
+        MaxBitrate: maxBitrate,
+        QvbrSettings: {
+          QvbrQualityLevel: 7,
+        },
+        QualityTuningLevel: 'SINGLE_PASS_HQ',
+        CodecProfile: 'HIGH',
+        CodecLevel: 'AUTO',
+        InterlaceMode: 'PROGRESSIVE',
+        FramerateControl: 'INITIALIZE_FROM_SOURCE',
+        GopSize: 2,
+        GopSizeUnits: 'SECONDS',
+        GopClosedCadence: 1,
+        NumberBFramesBetweenReferenceFrames: 2,
+        NumberReferenceFrames: 3,
+        SceneChangeDetect: 'TRANSITION_DETECTION',
+        ParControl: 'INITIALIZE_FROM_SOURCE',
+        EntropyEncoding: 'CABAC',
+      },
+    },
+  },
+  AudioDescriptions: [
+    {
+      AudioSourceName: 'Audio Selector 1',
+      CodecSettings: {
+        Codec: 'AAC',
+        AacSettings: {
+          Bitrate: 128000,
+          CodingMode: 'CODING_MODE_2_0',
+          SampleRate: 48000,
+          RawFormat: 'NONE',
+          Specification: 'MPEG4',
+          AudioDescriptionBroadcasterMix: 'NORMAL',
+        },
+      },
+      LanguageCodeControl: 'FOLLOW_INPUT',
+    },
+  ],
+  NameModifier: nameModifier,
+})
+
 export class MediaConvert {
-  private static _extractKey = (pathLike: string) => pathLike.replace('s3://reeplay/', '')
+  private static _extractKey = (pathLike: string) => {
+    const prefix = `s3://${AwsUtils.buckets.reeplay}/`
+    return pathLike.startsWith(prefix) ? pathLike.slice(prefix.length) : pathLike
+  }
+
+  static getHlsPrefix = (inputKey: string) => `${RAILWAY_HLS_PREFIX}/${inputKey}`
+
+  static getHlsMasterKey = (inputKey: string) =>
+    `${this.getHlsPrefix(inputKey)}/${RAILWAY_HLS_MASTER_NAME}`
 
   static recentCompletedJobsKeyPairs = async () => {
-    const command = new ListJobsCommand({
-      Order: 'DESCENDING',
-      Status: 'COMPLETE',
-    })
+    const response = await AwsUtils.clients.mediaConvert.send(
+      new ListJobsCommand({
+        Order: 'DESCENDING',
+        Status: 'COMPLETE',
+        Queue: env.RAILWAY_MEDIACONVERT_QUEUE_ARN || undefined,
+      }),
+    )
 
-    const response = await AwsUtils.clients.mediaConvert.send(command)
-
-    if (!response.Jobs) {
-      return []
-    }
+    if (!response.Jobs) return []
 
     const keys: Array<{ inputKey: string; outputKey: string }> = []
 
-    for (const { Settings, Id } of response.Jobs) {
-      if (!Settings || !Settings.Inputs || !Settings.OutputGroups) continue
+    for (const { Settings } of response.Jobs) {
+      if (!Settings?.Inputs?.[0]?.FileInput) continue
 
-      const fileInput = Settings.Inputs[0].FileInput
+      const destination =
+        Settings.OutputGroups?.[0]?.OutputGroupSettings?.HlsGroupSettings?.Destination
 
-      const fileOutput =
-        Settings.OutputGroups[0].OutputGroupSettings?.FileGroupSettings?.Destination
-
-      if (!fileInput || !fileOutput) continue
+      if (!destination) continue
 
       keys.push({
-        inputKey: this._extractKey(fileInput),
-        outputKey: this._extractKey(fileOutput),
+        inputKey: this._extractKey(Settings.Inputs[0].FileInput),
+        outputKey: this._extractKey(destination),
       })
     }
 
     return keys
   }
 
-  static waitForJobCompletion = async (jobId: string | undefined, maxWaitTimeMins = 1) => {
-    let isCompleted = false
-
-    if (typeof jobId !== 'string') return isCompleted
+  static waitForJobCompletion = async (jobId: string | undefined, maxWaitTimeMins = 30) => {
+    if (typeof jobId !== 'string') return false
 
     const later = moment(new Date()).add(maxWaitTimeMins, 'm').toDate()
 
     while (later > new Date()) {
-      const command = new GetJobCommand({
-        Id: jobId,
-      })
+      const response = await AwsUtils.clients.mediaConvert.send(new GetJobCommand({ Id: jobId }))
 
-      const response = await AwsUtils.clients.mediaConvert.send(command)
+      if (response.Job === undefined) break
 
-      if (response.Job === undefined) {
-        break
-      }
-
-      if (response.Job.Status === 'ERROR') {
+      if (response.Job.Status === 'ERROR' || response.Job.Status === 'CANCELED') {
         console.error({
-          '🛑MediaConver.waitForJobCompletion_error': {
+          'MediaConvert.waitForJobCompletion_error': {
             CreatedAt: response.Job.CreatedAt,
             ErrorCode: response.Job.ErrorCode,
             ErrorMessage: response.Job.ErrorMessage,
-            inputKey: response.Job.Settings?.Inputs && response.Job.Settings.Inputs[0].FileInput,
+            inputKey: response.Job.Settings?.Inputs?.[0]?.FileInput,
           },
         })
         break
       }
 
-      if (response.Job.Status === 'COMPLETE') {
-        isCompleted = true
-        break
-      }
+      if (response.Job.Status === 'COMPLETE') return true
 
-      await delay(3000)
+      await delay(5000)
     }
 
-    return isCompleted
+    return false
+  }
+
+  static getJob = async (jobId: string) => {
+    const response = await AwsUtils.clients.mediaConvert.send(new GetJobCommand({ Id: jobId }))
+    return response.Job
   }
 
   static transcode = async (key: string) => {
-    const FileInput = AwsUtils.buckets.s3Input + key
-    const Destination = AwsUtils.buckets.transcodeOutput + key
+    const fileInput = AwsUtils.buckets.s3Input + key
+    const destination = `${AwsUtils.buckets.railwayHlsOutput}${key}/master`
 
     const params: CreateJobCommandInput = {
       Role: env.IAM_ROLE_ARN,
+      Queue: env.RAILWAY_MEDIACONVERT_QUEUE_ARN || undefined,
+      JobTemplate: env.RAILWAY_MEDIACONVERT_JOB_TEMPLATE || undefined,
+      UserMetadata: {
+        application: 'reeplay',
+        backend: 'railway',
+        pipeline: 'railway-hls',
+        inputKey: key,
+      },
       Settings: {
+        TimecodeConfig: {
+          Source: 'ZEROBASED',
+        },
         Inputs: [
           {
-            FileInput,
-            // allows videos without audio to be converted
+            FileInput: fileInput,
             AudioSelectors: {
               'Audio Selector 1': {
                 DefaultSelection: 'DEFAULT',
               },
             },
-
-            // this does not allow videos without audio to be converted
-            // AudioSelectors: {
-            //   'Audio Selector 1': {
-            //     SelectorType: 'TRACK',
-            //     Tracks: [1],
-            //   },
-            // },
-            // TimecodeSource: "ZEROBASED",
-            // InputClippings: [
-            //     {
-            //         StartTimecode: "00:00:00:00",
-            //         EndTimecode: "00:00:30:00",
-            //     },
-            // ],
+            VideoSelector: {},
+            TimecodeSource: 'ZEROBASED',
           },
         ],
         OutputGroups: [
           {
-            Name: 'File Group',
+            Name: 'railway-reeplay-hls-480-720-1080',
             Outputs: [
-              {
-                ContainerSettings: {
-                  Container: 'MP4',
-                },
-                VideoDescription: {
-                  CodecSettings: {
-                    Codec: 'H_264',
-                    H264Settings: {
-                      Bitrate: 1500000,
-                      RateControlMode: 'CBR',
-                      CodecProfile: 'MAIN',
-                      CodecLevel: 'AUTO',
-                      InterlaceMode: 'PROGRESSIVE',
-                      FramerateControl: 'INITIALIZE_FROM_SOURCE',
-                      GopSize: 90,
-                      GopSizeUnits: 'FRAMES',
-                      GopClosedCadence: 1,
-                      NumberBFramesBetweenReferenceFrames: 2,
-                      NumberReferenceFrames: 3,
-                    },
-                  },
-                  Height: 480,
-                  Width: 640,
-                  ScalingBehavior: 'DEFAULT',
-                  Sharpness: 50,
-                },
-                AudioDescriptions: [
-                  {
-                    CodecSettings: {
-                      Codec: 'AAC',
-                      AacSettings: {
-                        Bitrate: 96000,
-                        CodingMode: 'CODING_MODE_2_0',
-                        SampleRate: 48000,
-                      },
-                    },
-                    LanguageCodeControl: 'FOLLOW_INPUT',
-                  },
-                ],
-                NameModifier: '_480p',
-              },
-              {
-                ContainerSettings: {
-                  Container: 'MP4',
-                },
-                VideoDescription: {
-                  CodecSettings: {
-                    Codec: 'H_264',
-                    H264Settings: {
-                      Bitrate: 4500000,
-                      RateControlMode: 'CBR',
-                      CodecProfile: 'MAIN',
-                      CodecLevel: 'AUTO',
-                      InterlaceMode: 'PROGRESSIVE',
-                      FramerateControl: 'INITIALIZE_FROM_SOURCE',
-                      GopSize: 90,
-                      GopSizeUnits: 'FRAMES',
-                      GopClosedCadence: 1,
-                      NumberBFramesBetweenReferenceFrames: 2,
-                      NumberReferenceFrames: 3,
-                    },
-                  },
-                  Height: 720,
-                  Width: 1280,
-                  ScalingBehavior: 'DEFAULT',
-                  Sharpness: 50,
-                },
-                AudioDescriptions: [
-                  {
-                    CodecSettings: {
-                      Codec: 'AAC',
-                      AacSettings: {
-                        Bitrate: 96000,
-                        CodingMode: 'CODING_MODE_2_0',
-                        SampleRate: 48000,
-                      },
-                    },
-                    LanguageCodeControl: 'FOLLOW_INPUT',
-                  },
-                ],
-                NameModifier: '_720p',
-              },
-              {
-                ContainerSettings: {
-                  Container: 'MP4',
-                },
-                VideoDescription: {
-                  CodecSettings: {
-                    Codec: 'H_264',
-                    H264Settings: {
-                      Bitrate: 6000000,
-                      RateControlMode: 'CBR',
-                      CodecProfile: 'MAIN',
-                      CodecLevel: 'AUTO',
-                      InterlaceMode: 'PROGRESSIVE',
-                      FramerateControl: 'INITIALIZE_FROM_SOURCE',
-                      GopSize: 90,
-                      GopSizeUnits: 'FRAMES',
-                      GopClosedCadence: 1,
-                      NumberBFramesBetweenReferenceFrames: 2,
-                      NumberReferenceFrames: 3,
-                    },
-                  },
-                  Height: 1080,
-                  Width: 1920,
-                  ScalingBehavior: 'DEFAULT',
-                  Sharpness: 50,
-                },
-                AudioDescriptions: [
-                  {
-                    CodecSettings: {
-                      Codec: 'AAC',
-                      AacSettings: {
-                        Bitrate: 96000,
-                        CodingMode: 'CODING_MODE_2_0',
-                        SampleRate: 48000,
-                      },
-                    },
-                    LanguageCodeControl: 'FOLLOW_INPUT',
-                  },
-                ],
-                NameModifier: '_1080p',
-              },
-              // {
-              //     ContainerSettings: {
-              //         Container: "MP4",
-              //     },
-              //     VideoDescription: {
-              //         CodecSettings: {
-              //             Codec: "H_265",
-              //             H265Settings: {
-              //                 Bitrate: 10000000,
-              //                 RateControlMode: "CBR",
-              //                 CodecProfile: "MAIN",
-              //                 CodecLevel: "AUTO",
-              //                 InterlaceMode: "PROGRESSIVE",
-              //                 FramerateControl:
-              //                     "INITIALIZE_FROM_SOURCE",
-              //                 GopSize: 90,
-              //                 GopSizeUnits: "FRAMES",
-              //                 GopClosedCadence: 1,
-              //                 NumberBFramesBetweenReferenceFrames: 2,
-              //                 NumberReferenceFrames: 3,
-              //             },
-              //         },
-              //         Height: 2160,
-              //         Width: 3840,
-              //         ScalingBehavior: "DEFAULT",
-              //         Sharpness: 50,
-              //     },
-              //     AudioDescriptions: [
-              //         {
-              //             CodecSettings: {
-              //                 Codec: "AAC",
-              //                 AacSettings: {
-              //                     Bitrate: 96000,
-              //                     CodingMode: "CODING_MODE_2_0",
-              //                     SampleRate: 48000,
-              //                 },
-              //             },
-              //             LanguageCodeControl: "FOLLOW_INPUT",
-              //         },
-              //     ],
-              //     NameModifier: "_4k",
-              // },
+              createHlsOutput({
+                width: 854,
+                height: 480,
+                maxBitrate: 1_500_000,
+                nameModifier: '_480p',
+              }),
+              createHlsOutput({
+                width: 1280,
+                height: 720,
+                maxBitrate: 3_500_000,
+                nameModifier: '_720p',
+              }),
+              createHlsOutput({
+                width: 1920,
+                height: 1080,
+                maxBitrate: 6_500_000,
+                nameModifier: '_1080p',
+              }),
             ],
             OutputGroupSettings: {
-              Type: 'FILE_GROUP_SETTINGS',
-              FileGroupSettings: {
-                Destination,
+              Type: 'HLS_GROUP_SETTINGS',
+              HlsGroupSettings: {
+                Destination: destination,
+                SegmentLength: 6,
+                MinSegmentLength: 0,
+                ManifestDurationFormat: 'INTEGER',
+                OutputSelection: 'MANIFESTS_AND_SEGMENTS',
+                SegmentControl: 'SEGMENTED_FILES',
+                DirectoryStructure: 'SINGLE_DIRECTORY',
+                ClientCache: 'ENABLED',
+                CodecSpecification: 'RFC_4281',
+                TimedMetadataId3Frame: 'PRIV',
+                TimedMetadataId3Period: 10,
               },
             },
           },
         ],
       },
+      StatusUpdateInterval: 'SECONDS_60',
+      Priority: 0,
+      AccelerationSettings: {
+        Mode: 'DISABLED',
+      },
     }
 
-    const job = await AwsUtils.clients.mediaConvert.send(new CreateJobCommand(params))
-    return job
+    return await AwsUtils.clients.mediaConvert.send(new CreateJobCommand(params))
   }
 }

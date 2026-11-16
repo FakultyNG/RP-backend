@@ -39,11 +39,14 @@ export class MediaManagement {
     transcoder = MediaConvert.transcode,
   ) => {
     const upload = await this._storeObjectFile(file, AwsUtils.buckets.reeplay, expire)
-    await transcoder(upload.Key)
+    const transcodeJob = await transcoder(upload.Key)
 
     return {
       ...upload,
       isTranscoded: false,
+      hlsStatus: 'processing' as const,
+      hlsJobId: transcodeJob.Job?.Id ?? null,
+      hlsKey: MediaConvert.getHlsMasterKey(upload.Key),
     }
   }
 

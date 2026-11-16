@@ -110,7 +110,7 @@ const schema = new Schema(
 
     videoQuality: {
       type: String,
-      enum: ['480p', '720p', '1080p'],
+      enum: ['automatic', '480p', '720p', '1080p'],
       required: true,
     },
   },
@@ -157,7 +157,7 @@ const schema = new Schema(
 
 schema.pre('validate', function (next) {
   if (this.isNew) {
-    this.videoQuality = this.role === 'customer' ? '480p' : '720p'
+    this.videoQuality = this.role === 'customer' ? 'automatic' : '720p'
   }
 
   next()
