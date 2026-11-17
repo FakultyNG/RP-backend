@@ -1,5 +1,6 @@
 import { MediaAccess } from '../../../src/services/media-access'
 import { SuggestionModel } from '../../models/suggestions.model'
+import { AdminNotificationCenterService } from './AdminNotificationCenterService'
 import { UserModel } from '../../models/users.model'
 import { LoggedInUser, StringOrObjectId } from '../../types'
 import { denyGuestUser } from '../../utils/denyGuestUser'
@@ -152,9 +153,18 @@ export class CustomerProfileService {
 
     denyGuestUser(currentUser)
 
-    await SuggestionModel.create({
+    const suggestion = await SuggestionModel.create({
       message,
       user_id: currentUser._id,
+    })
+
+    await AdminNotificationCenterService.publish({
+      eventKey: `suggestion:${suggestion._id}`,
+      title: 'New customer suggestion',
+      description: message,
+      category: 'suggestions',
+      route: '/suggestions',
+      metadata: { suggestionId: suggestion._id.toString() },
     })
   }
 }

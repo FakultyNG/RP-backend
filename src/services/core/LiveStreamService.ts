@@ -10,6 +10,7 @@ import { LiveMediaSourcesUtils } from '../../utils/LiveMediaSourcesUtils'
 import { ValidCurrency } from '../../utils/currency'
 import { Purge } from '../../utils/Purge'
 import { MediaManagement } from '../media-management'
+import { ContentLifecycleNotificationService } from './ContentLifecycleNotificationService'
 import { UploadMediaUtils } from '../../utils/UploadMediaUtils'
 import { UserDocument } from '../../models/users.model'
 import { ClientSession } from 'mongoose'
@@ -456,6 +457,21 @@ export class LiveStreamService {
   }
 
   static createLive = async (data: CreateLiveData) => {
-    return await withMongoDBSession(this._createLiveSession, data)
+    const result = await withMongoDBSession(this._createLiveSession, data)
+    const live = await LiveModel.findById(result.liveId)
+    if (live) {
+      await ContentLifecycleNotificationService.publish({
+        eventKey: `live:${live._id}:upcoming`,
+        title: 'New upcoming event',
+        description: `${live.title} has been scheduled on Reeplay`,
+        category: 'upcoming_events',
+        route: '/upcoming',
+        type: 'UPCOMING_EVENT',
+        audience: 'upcoming_events',
+        metadata: { contentId: live._id.toString(), contentType: 'live' },
+        photo: live.coverPhoto,
+      })
+    }
+    return result
   }
 }

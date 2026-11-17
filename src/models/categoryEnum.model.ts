@@ -14,6 +14,27 @@ const schema = new Schema(
       required: true,
       unique: true,
     },
+
+    location: {
+      type: String,
+      enum: [
+        'Homepage',
+        'Live/Channels',
+        'Live/Events',
+        'Live/Tv Shows',
+        'Live/Sports',
+        'Live/Podcast',
+      ],
+      default: 'Homepage',
+      index: true,
+    },
+
+    feedType: {
+      type: String,
+      enum: ['standard', 'personalized'],
+      default: 'standard',
+      index: true,
+    },
   },
 
   {

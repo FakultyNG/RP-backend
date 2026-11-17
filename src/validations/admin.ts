@@ -362,6 +362,14 @@ export const addCategorySchema = {
   body: Joi.object({
     name: STRING_SCHEMA.required(),
     position: Joi.number().required(),
+    location: STRING_SCHEMA.valid(
+      'Homepage',
+      'Live/Channels',
+      'Live/Events',
+      'Live/Tv Shows',
+      'Live/Sports',
+      'Live/Podcast',
+    ),
   }),
 }
 
@@ -369,10 +377,23 @@ export const updateCategorySchema = {
   body: Joi.object({
     name: STRING_SCHEMA,
     position: Joi.number(),
-  }).or('name', 'position'),
+    location: STRING_SCHEMA.valid(
+      'Homepage',
+      'Live/Channels',
+      'Live/Events',
+      'Live/Tv Shows',
+      'Live/Sports',
+      'Live/Podcast',
+    ),
+  }).or('name', 'position', 'location'),
 }
 
-export const updateGenreSchema = updateCategorySchema
+export const updateGenreSchema = {
+  body: Joi.object({
+    name: STRING_SCHEMA,
+    position: Joi.number(),
+  }).or('name', 'position'),
+}
 
 export const createAdminORSuperAdminSchema = {
   body: Joi.object({

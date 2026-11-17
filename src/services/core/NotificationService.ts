@@ -9,6 +9,8 @@ import { fetchManyUsersByFilterGenerator, Filter } from '../../generators/fetchA
 import { UserNotificationModel } from '../../models/customer.notification.model'
 import { ExpressRequestQuery, QueryParamsFeatures } from '../../utils/QueryParamsFeatures'
 import { NotificationRepo } from '../../repositories/NotificationRepo'
+import { SettingsModel } from '../../models/userSettings.model'
+import { Notification, NotificationAudience } from '../../notifications/notification'
 
 interface GetNotificationsInput {
   currentUser: LoggedInUser
@@ -39,6 +41,16 @@ interface CreateStoredAdminNotification extends CreateClientNotification {
     Bucket: string
     Key: string
   }
+}
+
+interface CreateAutomatedNotification {
+  eventKey: string
+  title: string
+  description: string
+  type: string
+  audience: NotificationAudience
+  metadata?: Record<string, unknown>
+  photo?: { Bucket: string; Key: string }
 }
 
 export class NotificationService {
@@ -80,6 +92,56 @@ export class NotificationService {
     }
 
     return adminNotification
+  }
+
+  static createAutomatedNotification = async ({
+    eventKey,
+    title,
+    description,
+    type,
+    audience,
+    metadata = {},
+    photo,
+  }: CreateAutomatedNotification) => {
+    if (await AdminNotificationModel.exists({ eventKey })) return false
+
+    let notification
+    try {
+      notification = await AdminNotificationModel.create({
+        eventKey,
+        title,
+        description,
+        type,
+        metadata,
+        photo,
+      })
+    } catch (error: any) {
+      if (error?.code === 11000) return false
+      throw error
+    }
+
+    const settingsFilter: Record<string, unknown> = { allow_notifications: true }
+    if (audience !== 'all') settingsFilter[audience] = true
+    const userIds = await SettingsModel.distinct('user_id', settingsFilter)
+    if (userIds.length > 0) {
+      await UserNotificationModel.insertMany(
+        userIds.map(user => ({
+          adminNotification: notification._id,
+          user,
+          publisher: 'Admin',
+        })),
+        { ordered: false },
+      )
+    }
+
+    await Notification.sendPreferencePushNotification(audience, {
+      title,
+      body: description,
+      type,
+      metadata,
+      image: photo?.Key ? MediaAccess.getImageAndSubtitleURL(photo.Key) : undefined,
+    })
+    return true
   }
 
   static createClientNotification = async ({

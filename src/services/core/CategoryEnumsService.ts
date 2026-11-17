@@ -7,6 +7,38 @@ import { CategoryEnumModel } from '../../models/categoryEnum.model'
 export class CategoryEnumService {
   static readonly PREMIUM_ADS_CATEGORY = 'Premium Ads'
   static readonly PREMIUM_ADS_POSITION = 11
+  static readonly PERSONALIZED_CATEGORY = 'Because of your interests'
+  static readonly PERSONALIZED_DEFAULT_POSITION = 3
+
+  static ensurePersonalizedCategory = async () => {
+    const existing = await CategoryEnumModel.findOne({ feedType: 'personalized' })
+    if (existing) return existing
+
+    const legacy = await CategoryEnumModel.findOne({
+      name: { $regex: /^Because of your interests?$/i },
+    })
+    if (legacy) {
+      legacy.feedType = 'personalized'
+      return await legacy.save()
+    }
+
+    const topTen = await CategoryEnumModel.findOne({ name: { $regex: /^Top 10/i } })
+    const position = topTen
+      ? topTen.position + 1
+      : this.PERSONALIZED_DEFAULT_POSITION
+    const categoriesToShift = await CategoryEnumModel.find({ position: { $gte: position } })
+      .sort({ position: -1 })
+    for (const category of categoriesToShift) {
+      category.position += 1
+      await category.save()
+    }
+
+    return await CategoryEnumModel.create({
+      name: this.PERSONALIZED_CATEGORY,
+      position,
+      feedType: 'personalized',
+    })
+  }
 
   static ensurePremiumAdsCategory = async () => {
     const existing = await CategoryEnumModel.findOne({
@@ -54,26 +86,44 @@ export class CategoryEnumService {
     })
   }
 
-  static addCategory = async (name: string, position: number) => {
+  static addCategory = async (name: string, position: number, location = 'Homepage') => {
     const category = await CategoryEnumModel.create({
       name,
       position,
+      location,
     })
 
     return category
   }
 
   static updateCategory = async (catId: string, data: Record<string, any>) => {
-    const updatedCategory = await CategoryEnumModel.findByIdAndUpdate(catId, data, { new: true })
-
-    if (updatedCategory == null) {
+    const category = await CategoryEnumModel.findById(catId)
+    if (category == null) {
       throw new OperationalError('category id is invalid', 404)
     }
 
-    return updatedCategory
+    if (typeof data.position === 'number' && data.position !== category.position) {
+      const occupant = await CategoryEnumModel.findOne({
+        position: data.position,
+        _id: { $ne: category._id },
+      })
+      const oldPosition = category.position
+      category.position = -Math.abs(Date.now())
+      await category.save()
+      if (occupant) {
+        occupant.position = oldPosition
+        await occupant.save()
+      }
+      category.position = data.position
+    }
+    if (typeof data.name === 'string') category.name = data.name
+    await category.save()
+
+    return category
   }
 
   static getCategories = async (query: Request['query']) => {
+    await this.ensurePersonalizedCategory()
     await this.ensurePremiumAdsCategory()
     const features = new QueryParamsFeatures(CategoryEnumRepo.getAllCategories(), {
       defaultLimit: 300,

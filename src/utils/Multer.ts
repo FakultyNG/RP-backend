@@ -58,11 +58,23 @@ export class Multer {
         cb(null, true)
       },
     }),
+    audioConfig: multer({
+      storage: this._diskStorageConfig,
+      limits: { fileSize: Bytes.mb(5) },
+      fileFilter: (_, file, cb) => {
+        if (!file.mimetype.startsWith('audio/')) {
+          cb(new OperationalError('Only audio files are allowed', 400))
+          return
+        }
+        cb(null, true)
+      },
+    }),
   }
 
   static uploadSingleImage = this._configs.imageConfig.single('photo')
   static uploadSingleVideo = this._configs.vidConfig.single('video')
   static uploadSingleSubtitle = this._configs.subtitleConfig.single('subtitle')
+  static uploadSingleNotificationSound = this._configs.audioConfig.single('sound')
 
   static adminUploadVideoConfig = this._configs.multipleTypesConfig.fields([
     { name: 'trailer', maxCount: 1 },

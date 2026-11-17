@@ -23,6 +23,31 @@ type HlsRendition = {
   nameModifier: '_480p' | '_720p' | '_1080p'
 }
 
+export type HlsTranscodeProfile = 'adaptive' | 'single-480p'
+
+const HLS_480P_RENDITION: HlsRendition = {
+  width: 854,
+  height: 480,
+  maxBitrate: 1_500_000,
+  nameModifier: '_480p',
+}
+
+const HLS_ADAPTIVE_RENDITIONS: HlsRendition[] = [
+  HLS_480P_RENDITION,
+  {
+    width: 1280,
+    height: 720,
+    maxBitrate: 3_500_000,
+    nameModifier: '_720p',
+  },
+  {
+    width: 1920,
+    height: 1080,
+    maxBitrate: 6_500_000,
+    nameModifier: '_1080p',
+  },
+]
+
 const createHlsOutput = ({
   width,
   height,
@@ -171,9 +196,11 @@ export class MediaConvert {
     return response.Job
   }
 
-  static transcode = async (key: string) => {
+  static transcode = async (key: string, profile: HlsTranscodeProfile = 'adaptive') => {
     const fileInput = AwsUtils.buckets.s3Input + key
     const destination = `${AwsUtils.buckets.railwayHlsOutput}${key}/master`
+    const isSingle480p = profile === 'single-480p'
+    const renditions = isSingle480p ? [HLS_480P_RENDITION] : HLS_ADAPTIVE_RENDITIONS
 
     const params: CreateJobCommandInput = {
       Role: env.IAM_ROLE_ARN,
@@ -182,7 +209,8 @@ export class MediaConvert {
       UserMetadata: {
         application: 'reeplay',
         backend: 'railway',
-        pipeline: 'railway-hls',
+        pipeline: isSingle480p ? 'railway-hls-480p' : 'railway-hls-adaptive',
+        profile,
         inputKey: key,
       },
       Settings: {
@@ -203,27 +231,10 @@ export class MediaConvert {
         ],
         OutputGroups: [
           {
-            Name: 'railway-reeplay-hls-480-720-1080',
-            Outputs: [
-              createHlsOutput({
-                width: 854,
-                height: 480,
-                maxBitrate: 1_500_000,
-                nameModifier: '_480p',
-              }),
-              createHlsOutput({
-                width: 1280,
-                height: 720,
-                maxBitrate: 3_500_000,
-                nameModifier: '_720p',
-              }),
-              createHlsOutput({
-                width: 1920,
-                height: 1080,
-                maxBitrate: 6_500_000,
-                nameModifier: '_1080p',
-              }),
-            ],
+            Name: isSingle480p
+              ? 'railway-reeplay-hls-480'
+              : 'railway-reeplay-hls-480-720-1080',
+            Outputs: renditions.map(createHlsOutput),
             OutputGroupSettings: {
               Type: 'HLS_GROUP_SETTINGS',
               HlsGroupSettings: {
@@ -252,4 +263,6 @@ export class MediaConvert {
 
     return await AwsUtils.clients.mediaConvert.send(new CreateJobCommand(params))
   }
+
+  static transcode480p = (key: string) => MediaConvert.transcode(key, 'single-480p')
 }

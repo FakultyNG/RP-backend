@@ -43,8 +43,8 @@ export class AdminEnumController {
 
   // ********** Category *******
 
-  static addCategory = Catch.async(async ({ body: { name, position } }, res) => {
-    await CategoryEnumService.addCategory(name, position)
+  static addCategory = Catch.async(async ({ body: { name, position, location } }, res) => {
+    await CategoryEnumService.addCategory(name, position, location)
 
     sendResponse({
       res,

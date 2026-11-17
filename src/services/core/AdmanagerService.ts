@@ -70,7 +70,7 @@ export class AdManagerService {
   protected static _uploadMedia = async ({ videoFile, imageFile, expire }: UploadMediaInput) => {
     const [imageUploadResult, videoUploadResult] = await Promise.allSettled([
       MediaManagement.storeImageAndSubtitle(imageFile, expire, 'landscape-poster'),
-      MediaManagement.uploadAndInitiateMediaConvert(videoFile, expire),
+      MediaManagement.upload480pAndInitiateMediaConvert(videoFile, expire),
     ])
 
     if (imageUploadResult.status === 'rejected') {
@@ -230,7 +230,7 @@ export class AdManagerService {
     }
 
     if (data.videoFile) {
-      const uploadedVideo = await MediaManagement.uploadAndInitiateMediaConvert(
+      const uploadedVideo = await MediaManagement.upload480pAndInitiateMediaConvert(
         data.videoFile,
         expireAt,
       )

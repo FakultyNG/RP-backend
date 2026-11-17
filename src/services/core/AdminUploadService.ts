@@ -32,6 +32,7 @@ import { addSeriesSchema, addMovieOrSkitSchema, addMusicVideoSchema } from '../.
 import { UploadMediaUtils } from '../../utils/UploadMediaUtils'
 import { VideoUploadModel } from '../../models/videoupload.model'
 import { CronTaskHandlers } from '../../cron/CronTaskHandlers'
+import { ContentLifecycleNotificationService } from './ContentLifecycleNotificationService'
 
 export class AdminUploadService {
   static resolveWithMediaSources = (queryParams: QueryParamsFeaturesOptions['queryParams']) =>
@@ -198,7 +199,7 @@ export class AdminUploadService {
     }
 
     if (params.data.trailer) {
-      const trailerUpload = await MediaManagement.uploadAndInitiateMediaConvert(
+      const trailerUpload = await MediaManagement.upload480pAndInitiateMediaConvert(
         params.data.trailer,
         expiry,
       )
@@ -229,8 +230,39 @@ export class AdminUploadService {
     return videoDocument
   }
 
-  static addVideo = async (input: AddVideoParams) =>
-    await withMongoDBSession(this._uploadVideoSession, input)
+  static addVideo = async (input: AddVideoParams) => {
+    const video = await withMongoDBSession(this._uploadVideoSession, input)
+    const releaseDate = video.releaseDate ? new Date(video.releaseDate) : null
+    const isUpcoming = Boolean(releaseDate && releaseDate.getTime() > Date.now())
+
+    if (isUpcoming) {
+      await ContentLifecycleNotificationService.publish({
+        eventKey: `vod:${video._id}:upcoming`,
+        title: 'New upcoming title',
+        description: `${video.title} is coming to Reeplay`,
+        category: 'upcoming_events',
+        route: '/upcoming',
+        type: 'UPCOMING_CONTENT',
+        audience: 'upcoming_events',
+        metadata: { contentId: video._id.toString(), contentType: 'vod' },
+        photo: video.landscapePhoto,
+      })
+    } else if (video.videoLink) {
+      await ContentLifecycleNotificationService.publish({
+        eventKey: `vod:${video._id}:new-arrival`,
+        title: 'New arrival',
+        description: `${video.title} is now available`,
+        category: 'new_arrivals',
+        route: '/uploads',
+        type: 'NEW_ARRIVAL',
+        audience: 'new_arrivals',
+        metadata: { contentId: video._id.toString(), contentType: 'vod' },
+        photo: video.landscapePhoto,
+      })
+    }
+
+    return video
+  }
 
   static addSeason = async ({ videoId, adminId, description }: AddSeasonParams) => {
     const aggrRes = this._validateWithMovieAndPrevSeasonsAggrResult(
@@ -310,7 +342,7 @@ export class AdminUploadService {
       if (episode.trailerUpload) replacedUploads.push(episode.trailerUpload)
 
       if (data.trailer) {
-        const upload = await MediaManagement.uploadAndInitiateMediaConvert(data.trailer)
+        const upload = await MediaManagement.upload480pAndInitiateMediaConvert(data.trailer)
         const uploadDocument = UploadMediaUtils.getVideoUploadDocument(upload)
         uploadDocument.parentId = episode._id
         uploadDocument.parentType = 'episode-trailer'
@@ -388,7 +420,7 @@ export class AdminUploadService {
     })
 
     if (data.trailer) {
-      const trailerUpload = await MediaManagement.uploadAndInitiateMediaConvert(data.trailer)
+      const trailerUpload = await MediaManagement.upload480pAndInitiateMediaConvert(data.trailer)
       const videoUploadDocument = UploadMediaUtils.getVideoUploadDocument(trailerUpload)
       videoUploadDocument.parentId = episodeDocument._id
       videoUploadDocument.parentType = 'episode-trailer'
@@ -561,7 +593,7 @@ export class AdminUploadService {
       videoDocument.trailerLink = undefined
       videoDocument.isTrailerReady = false
     } else if (data.trailer) {
-      const trailerUpload = await MediaManagement.uploadAndInitiateMediaConvert(
+      const trailerUpload = await MediaManagement.upload480pAndInitiateMediaConvert(
         data.trailer,
         expiry,
       )

@@ -4,6 +4,7 @@ import { OperationalError } from './OperationalError'
 import { genRandUniqId } from './strGen'
 import { validCurrencies, ValidCurrency } from './currency'
 import { Notification } from '../notifications/notification'
+import { ContentLifecycleNotificationService } from '../services/core/ContentLifecycleNotificationService'
 
 interface CalculateEventChargesParams {
   start: string
@@ -60,6 +61,18 @@ export const handleRTMPStreamPublish = async (streamKey: unknown) => {
     image,
     metadata: { liveId },
   }, true)
+
+  await ContentLifecycleNotificationService.publish({
+    eventKey: `live:${liveId}:started`,
+    title: 'Live now',
+    description: `${liveDocument.title} is live now`,
+    category: 'live_channels',
+    route: '/live',
+    type: 'LIVE_EVENT_REMINDER',
+    audience: 'live_channels',
+    metadata: { liveId, contentType: 'live' },
+    photo: liveDocument.coverPhoto,
+  })
 }
 
 export const handleRTMPStreamPublishDone = async (streamKey: unknown) => {

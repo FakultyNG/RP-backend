@@ -50,6 +50,12 @@ export class MediaManagement {
     }
   }
 
+  static upload480pAndInitiateMediaConvert = async (file: MulterFile, expire?: Date) =>
+    this.uploadAndInitiateMediaConvert(file, expire, MediaConvert.transcode480p)
+
+  static storeNotificationSound = (file: MulterFile) =>
+    this._storeObjectFile(file, AwsUtils.buckets.replayImages)
+
   protected static _storeObjectFile = async (
     file: MulterFile,
     bucket: string,

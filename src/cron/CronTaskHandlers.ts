@@ -7,7 +7,6 @@ import { VideoUpload } from '../models/videoupload.model'
 import { EpisodeModel } from '../models/episodes.model'
 import { OperationalError } from '../utils/OperationalError'
 import { AdModel } from '../models/admanager.model'
-import { Document } from 'mongoose'
 import { StringOrObjectId } from '../types'
 import { SeasonModel } from '../models/seasons.model'
 import {
@@ -20,14 +19,15 @@ import { formatTimeWithTimezone } from '../utils/date'
 import { LiveViewerPresenceModel } from '../models/liveViewerPresence.model'
 import { MediaConvert } from '../services/aws/mediaConvert'
 import { AdManagerService } from '../services/core/AdmanagerService'
+import { ContentLifecycleNotificationService } from '../services/core/ContentLifecycleNotificationService'
 
 export class CronTaskHandlers {
   protected static checkTranscodedParentDocumentOrThrow = (
-    parentDocument: Document | null,
+    parentDocument: unknown | null,
     documentId: StringOrObjectId,
   ) => {
     if (parentDocument == null) {
-      new OperationalError(`Loose parent for video upload document with id: ${documentId}`, 404)
+      throw new OperationalError(`Loose parent for video upload document with id: ${documentId}`, 404)
     }
   }
 
@@ -43,12 +43,27 @@ export class CronTaskHandlers {
 
     switch (parentType) {
       case 'vod':
-        this.checkTranscodedParentDocumentOrThrow(
-          await VideoModel.findByIdAndUpdate(parentId, {
+        const readyVideo = await VideoModel.findByIdAndUpdate(parentId, {
             isVideoReady: true,
-          }),
-          videoUploadDocumentId,
-        )
+          }, { new: true })
+        this.checkTranscodedParentDocumentOrThrow(readyVideo, videoUploadDocumentId)
+
+        if (
+          readyVideo &&
+          (!readyVideo.releaseDate || readyVideo.releaseDate.getTime() <= Date.now())
+        ) {
+          await ContentLifecycleNotificationService.publish({
+            eventKey: `vod:${readyVideo._id}:new-arrival`,
+            title: 'New arrival',
+            description: `${readyVideo.title} is now available`,
+            category: 'new_arrivals',
+            route: '/uploads',
+            type: 'NEW_ARRIVAL',
+            audience: 'new_arrivals',
+            metadata: { contentId: readyVideo._id.toString(), contentType: 'vod' },
+            photo: readyVideo.landscapePhoto,
+          })
+        }
 
         break
 
@@ -63,12 +78,22 @@ export class CronTaskHandlers {
         break
 
       case 'episode':
-        this.checkTranscodedParentDocumentOrThrow(
-          await EpisodeModel.findByIdAndUpdate(parentId, {
+        const readyEpisode = await EpisodeModel.findByIdAndUpdate(parentId, {
             isVideoReady: true,
-          }),
-          videoUploadDocumentId,
-        )
+          }, { new: true })
+        this.checkTranscodedParentDocumentOrThrow(readyEpisode, videoUploadDocumentId)
+        if (readyEpisode) {
+          await ContentLifecycleNotificationService.publish({
+            eventKey: `episode:${readyEpisode._id}:new-arrival`,
+            title: 'New episode available',
+            description: `${readyEpisode.title} is ready to watch`,
+            category: 'new_arrivals',
+            route: '/uploads',
+            type: 'NEW_ARRIVAL',
+            audience: 'new_arrivals',
+            metadata: { contentId: readyEpisode._id.toString(), contentType: 'episode' },
+          })
+        }
 
         break
 

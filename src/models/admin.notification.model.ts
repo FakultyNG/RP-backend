@@ -6,8 +6,13 @@ const schema = new Schema(
     admin: {
       type: Schema.Types.ObjectId,
       ref: 'users',
-      required: true,
       index: true,
+    },
+
+    eventKey: {
+      type: String,
+      unique: true,
+      sparse: true,
     },
 
     title: {
