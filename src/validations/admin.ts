@@ -398,7 +398,7 @@ export const createClientSchema = {
 
 export const createAdSchema = Joi.object({
   title: STRING_SCHEMA.required(),
-  type: STRING_SCHEMA.valid('general', 'web', 'mobile').required(),
+  type: STRING_SCHEMA.valid('mobile').required(),
   brand: STRING_SCHEMA.required(),
   link: Joi.string().uri({ scheme: ['http', 'https'] }).required(),
   cta: STRING_SCHEMA.required(),
@@ -454,7 +454,7 @@ export const createHomeAdSchema = Joi.object({
 
 export const updateAdSchema = Joi.object({
   title: STRING_SCHEMA.required(),
-  type: STRING_SCHEMA.valid('general', 'web', 'mobile', 'home_ad').required(),
+  type: STRING_SCHEMA.valid('mobile').required(),
   brand: STRING_SCHEMA.required(),
   link: Joi.string().uri({ scheme: ['http', 'https'] }).required(),
   cta: STRING_SCHEMA.required(),

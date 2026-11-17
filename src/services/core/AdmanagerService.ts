@@ -28,7 +28,7 @@ export interface CreateHomeAdData {
 
 export interface UpdateAdData {
   title: string
-  type: 'general' | 'web' | 'mobile' | 'home_ad'
+  type: 'mobile'
   brand: string
   link: string
   cta: string
@@ -50,13 +50,15 @@ export class AdManagerService {
   protected static _resolveMediaSources = (ads: FetchAdResult[], quality?: VideoQuality) => {
     return ads.map(ad => {
       const photoUrl = MediaAccess.getImageAndSubtitleURL(ad.photo.Key)
-      const videoUrl = ad.videoUpload
+      const hasVideo = Boolean(ad.videoUpload)
+      const videoUrl = ad.videoUpload?.isTranscoded
         ? VidUploadUtils.getResSourceUrl(ad.videoUpload, quality ?? '720p')
         : undefined
 
       return Object.assign(ad, {
         photoUrl,
         videoUrl,
+        hasVideo,
         videoUpload: undefined,
         photo: undefined,
         __v: undefined,
@@ -169,6 +171,7 @@ export class AdManagerService {
     session: MaybeSession,
   ) => {
     const { startAt, expireAt } = this._schedule(start, expiry)
+    await CategoryEnumService.ensurePremiumAdsCategory()
 
     const { imageUpload, videoUpload } = await this._uploadMedia({
       videoFile,
@@ -213,7 +216,7 @@ export class AdManagerService {
     let replacementPhoto = ad.photo
     let replacementVideoUpload = ad.videoUpload
 
-    if (data.type !== 'home_ad' && !data.videoFile && !replacementVideoUpload) {
+    if (!data.videoFile && !replacementVideoUpload) {
       throw new OperationalError('A video file is required for this ad placement', 400)
     }
 
@@ -226,10 +229,7 @@ export class AdManagerService {
       replacementPhoto = { Bucket: uploadedPhoto.Bucket, Key: uploadedPhoto.Key }
     }
 
-    if (data.type === 'home_ad') {
-      replacementVideoUpload = undefined
-      await CategoryEnumService.ensurePremiumAdsCategory()
-    } else if (data.videoFile) {
+    if (data.videoFile) {
       const uploadedVideo = await MediaManagement.uploadAndInitiateMediaConvert(
         data.videoFile,
         expireAt,
@@ -244,17 +244,16 @@ export class AdManagerService {
     ad.set({
       title: data.title.trim(),
       type: data.type,
-      brand: data.type === 'home_ad' ? 'Home-Ads' : data.brand.trim(),
+      brand: data.brand.trim(),
       link: data.link.trim(),
-      cta: data.type === 'home_ad' ? 'Learn More' : data.cta.trim(),
+      cta: data.cta.trim(),
       duration: data.duration ?? 0,
       start: startAt,
       expiry: expireAt,
       active: data.active,
       photo: replacementPhoto,
       videoUpload: replacementVideoUpload,
-      isVideoReady:
-        data.type === 'home_ad' ? false : data.videoFile ? false : ad.isVideoReady,
+      isVideoReady: data.videoFile ? false : ad.isVideoReady,
     })
     await ad.save()
 

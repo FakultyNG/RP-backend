@@ -31,14 +31,22 @@ export class AdManagerRepo {
         localField: 'videoUpload',
         foreignField: '_id',
         as: 'videoUpload',
-        pipeline: [{ $match: { isTranscoded: true } }],
       },
     },
     { $set: { videoUpload: { $first: '$videoUpload' } } },
   ]
 
   protected static _readyVideoPipeline = [
-    ...this._videoLookupPipeline,
+    {
+      $lookup: {
+        from: 'video_uploads',
+        localField: 'videoUpload',
+        foreignField: '_id',
+        as: 'videoUpload',
+        pipeline: [{ $match: { isTranscoded: true } }],
+      },
+    },
+    { $set: { videoUpload: { $first: '$videoUpload' } } },
     { $match: { videoUpload: { $ne: null } } },
   ]
 
@@ -56,17 +64,16 @@ export class AdManagerRepo {
 
   static fetcRandom = (type: unknown) => {
     const now = new Date()
-    const hasSpecificType = typeof type === 'string' && type !== 'all'
+    const requestedType = typeof type === 'string' && type !== 'all' ? type : 'mobile'
     const res = AdModel.aggregate([
       {
         $match: {
           active: true,
           start: { $lte: now },
           expiry: { $gt: now },
-          type: hasSpecificType ? type : { $ne: 'home_ad' },
+          type: requestedType,
         },
       },
-      ...(hasSpecificType ? [] : [this._typeMatch(type)]),
       ...this._readyVideoPipeline,
       // Preserve the random-on-each-request behaviour while returning enough
       // ads for clients to rotate continuously during the current session.
@@ -79,7 +86,7 @@ export class AdManagerRepo {
   static fetchHomeAds = () => {
     const now = new Date()
     return AdModel.find({
-      type: 'home_ad',
+      type: { $in: ['mobile', 'home_ad'] },
       active: true,
       start: { $lte: now },
       expiry: { $gt: now },
