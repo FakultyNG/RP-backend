@@ -24,6 +24,7 @@ import { OnboardingController } from '../../controllers/customers/onboarding.cus
 import { superAdminNotificationRouter } from './notificationRoute'
 import { superAdminBulkDeleteRouter } from './bulkDeleteRoute'
 import { superAdminPlatformSettingsRouter } from './platformSettingsRoute'
+import {superAdminTopTenRouter} from './topTenRoute'
 
 export const superAdminRouter = express.Router()
 
@@ -60,6 +61,7 @@ superAdminRouter.use('/ads', superAdminAdsRouter)
 superAdminRouter.use('/notifications', superAdminNotificationRouter)
 superAdminRouter.use('/bulk-delete', superAdminBulkDeleteRouter)
 superAdminRouter.use('/platform-settings', superAdminPlatformSettingsRouter)
+superAdminRouter.use('/top-10', superAdminTopTenRouter)
 
 superAdminRouter.post(
   '/create-super-admin',

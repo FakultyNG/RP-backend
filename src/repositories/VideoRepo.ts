@@ -323,7 +323,6 @@ export class VideoRepo {
                   {
                     $match: {
                       isVideoReady: true,
-                      isTrailerReady: true,
                     },
                   },
                 ]),
@@ -729,6 +728,44 @@ export class VideoRepo {
       limit,
     })
   }
+
+  static fetchTopTen = async (videoIds: string[], includeIneligible = false) => {
+    const ids = videoIds.slice(0, 10).map(toObjectId)
+    if (ids.length === 0) return []
+
+    return this.fetchVideoAggr({
+      prevStages: [
+        {
+          $match: {
+            _id: {$in: ids},
+            ...(includeIneligible ? {} : {active: true}),
+          },
+        },
+        {$set: {topTenRank: {$add: [{$indexOfArray: [ids, '$_id']}, 1]}}},
+      ],
+      sortStage: {$sort: {topTenRank: 1}},
+      excludePreReleased: !includeIneligible,
+      excludeExpired: !includeIneligible,
+      onlyReady: !includeIneligible,
+      page: 1,
+      limit: 10,
+    })
+  }
+
+  static fetchTopTenCandidates = async () =>
+    this.fetchVideoAggr({
+      prevStages: [{$match: {active: true}}],
+      sortStage: {
+        $sort: {
+          engagements: -1,
+          viewsCount: -1,
+          averageRating: -1,
+          createdAt: -1,
+        },
+      },
+      page: 1,
+      limit: 10,
+    })
 
   static adminFetchFeatured = async (page = 1, limit = 50) => {
     const now = new Date()

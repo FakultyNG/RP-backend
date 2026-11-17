@@ -40,6 +40,7 @@ import { VideoUploadModel } from '../../models/videoupload.model'
 import { EpisodeModel } from '../../models/episodes.model'
 import { SeasonModel } from '../../models/seasons.model'
 import { MediaAccess } from '../../services/media-access'
+import {TopTenService} from '../../services/core/TopTenService'
 
 export type PaymentHistoryCaller = {
   caller: 'Admin' | 'Others'
@@ -475,6 +476,14 @@ export class SharedController extends UploadMediaUtils {
     sendResponse({
       res,
       data: { source },
+    })
+  })
+
+  static fetchTopTen = Catch.async(async ({user}, res) => {
+    sendResponse({
+      res,
+      data: await TopTenService.getPublic(GetDefined.loggedInUser(user)),
+      message: 'Top 10 fetched',
     })
   })
 

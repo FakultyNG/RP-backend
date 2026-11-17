@@ -113,7 +113,7 @@ export class CronTaskHandlers {
     }
   }
 
-  protected static _updateVideoUploadDoc = async (document: VideoUpload) => {
+  static updateVideoUploadDoc = async (document: VideoUpload) => {
     try {
       if (!document.hlsKey) {
         return
@@ -137,14 +137,18 @@ export class CronTaskHandlers {
       document.hlsError = null
       await this._updateTranscodedDocumentParent(document)
       await document.save()
-    } catch (error) {
-      console.error('Error updating isTranscoded for video upload document', document._id)
+    } catch (error: any) {
+      console.error(
+        'Error updating isTranscoded for video upload document',
+        document._id,
+        error?.message ?? error,
+      )
     }
   }
 
   static updateVidUploadsResolutions = async () => {
     for await (const videoUploadDouments of fetchUntranscodedVideoUploadDocumentsGenerator()) {
-      await Promise.all(videoUploadDouments.map(this._updateVideoUploadDoc))
+      await Promise.all(videoUploadDouments.map(this.updateVideoUploadDoc))
     }
   }
 

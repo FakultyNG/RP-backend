@@ -1,5 +1,3 @@
-import moment from 'moment'
-import { getSignedUrl as getCFSignedUrl } from '@aws-sdk/cloudfront-signer'
 import jwt from 'jsonwebtoken'
 import path from 'node:path'
 import env from '../env'
@@ -11,20 +9,46 @@ type HlsPlaybackToken = {
   key: string
 }
 
+type VideoPlaybackToken = {
+  scope: 'railway-video'
+  key: string
+}
+
 export class MediaAccess {
   static getImageAndSubtitleURL = (key: string) => `${env.CDN_IMAGES_BASE_URL}/${key}`
 
+  // Kept under the existing method name so API response contracts do not
+  // change. Legacy MP4s are read from the Railway S3 bucket rather than the
+  // retired CloudFront origin.
   static getSignedVideoURL = (key: string) => {
-    const privateKey = env.CFS_PRIVATE_KEY.replace(/\\n/g, '\n')
+    const token = jwt.sign(
+      { scope: 'railway-video', key } satisfies VideoPlaybackToken,
+      env.JWT_SECRET,
+      { expiresIn: '1d' },
+    )
+    return `${env.PUBLIC_APP_ORIGIN}/media/video/${encodeURIComponent(token)}`
+  }
 
-    const URL = getCFSignedUrl({
-      url: env.CFSDISTRIBUTION + '/' + key,
-      keyPairId: env.KEY_PAIR_ID,
-      dateLessThan: moment().add(1, 'days').toISOString(),
-      privateKey,
-    })
+  static getVideoPlaybackKey = (token: string) => {
+    let payload: string | jwt.JwtPayload
+    try {
+      payload = jwt.verify(token, env.JWT_SECRET)
+    } catch {
+      throw new OperationalError('Video playback link is invalid or expired', 401)
+    }
 
-    return URL
+    if (
+      typeof payload === 'string' ||
+      payload.scope !== 'railway-video' ||
+      typeof payload.key !== 'string' ||
+      !payload.key ||
+      path.posix.isAbsolute(payload.key) ||
+      path.posix.normalize(payload.key).startsWith('../')
+    ) {
+      throw new OperationalError('Invalid video playback link', 401)
+    }
+
+    return payload.key
   }
 
   private static createHlsToken = (key: string) =>
@@ -68,9 +92,8 @@ export class MediaAccess {
     const manifest = await object.Body.transformToString()
     const parentDirectory = path.posix.dirname(key)
 
-    const rewritten = manifest
-      .split(/\r?\n/)
-      .map(line => {
+    const rewrittenLines = await Promise.all(
+      manifest.split(/\r?\n/).map(async line => {
         const trimmed = line.trim()
         if (!trimmed || trimmed.startsWith('#')) return line
 
@@ -81,9 +104,11 @@ export class MediaAccess {
 
         return childKey.toLowerCase().includes('.m3u8')
           ? this.getHlsPlaybackURL(childKey)
-          : this.getSignedVideoURL(childKey)
-      })
-      .join('\n')
+          : await S3.getSignedVideoObjectUrl(childKey)
+      }),
+    )
+
+    const rewritten = rewrittenLines.join('\n')
 
     return rewritten
   }

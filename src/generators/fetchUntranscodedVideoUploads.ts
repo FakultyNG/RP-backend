@@ -2,26 +2,29 @@ import { VideoUploadModel } from '../models/videoupload.model'
 
 export async function* fetchUntranscodedVideoUploadDocumentsGenerator() {
   const limit = 10
-  let skip = 0
+  const cursor = VideoUploadModel.find({
+    isTranscoded: false,
+    hlsKey: { $exists: true, $ne: null },
+    hlsStatus: { $ne: 'failed' },
+  })
+    .sort({ _id: 1 })
+    .cursor({ batchSize: limit })
 
-  while (true) {
-    try {
-      const videoUploadDocuments = await VideoUploadModel.find({ isTranscoded: false })
-        .skip(skip)
-        .limit(limit)
-        .sort({
-          _id: 1,
-        })
+  let batch = []
 
-      if (videoUploadDocuments.length === 0) {
-        break
+  try {
+    for await (const document of cursor) {
+      batch.push(document)
+      if (batch.length === limit) {
+        yield batch
+        batch = []
       }
-
-      yield videoUploadDocuments
-      skip += limit
-    } catch (e: any) {
-      console.error('fetchUntranscodedVideoUploadDocumentsGenerator error', e.message || e)
-      break
     }
+
+    if (batch.length > 0) yield batch
+  } catch (e: any) {
+    console.error('fetchUntranscodedVideoUploadDocumentsGenerator error', e.message || e)
+  } finally {
+    await cursor.close().catch(() => undefined)
   }
 }

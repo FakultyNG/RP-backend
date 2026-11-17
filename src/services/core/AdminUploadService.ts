@@ -31,6 +31,7 @@ import { ValidCurrency } from '../../utils/currency'
 import { addSeriesSchema, addMovieOrSkitSchema, addMusicVideoSchema } from '../../validations/admin'
 import { UploadMediaUtils } from '../../utils/UploadMediaUtils'
 import { VideoUploadModel } from '../../models/videoupload.model'
+import { CronTaskHandlers } from '../../cron/CronTaskHandlers'
 
 export class AdminUploadService {
   static resolveWithMediaSources = (queryParams: QueryParamsFeaturesOptions['queryParams']) =>
@@ -618,6 +619,9 @@ export class AdminUploadService {
       prevStages: [{ $match: { type } }],
       excludeExpired: false,
       excludePreReleased: false,
+      // Admins must still be able to see and diagnose uploads while HLS
+      // processing is pending or has failed. Customer queries remain ready-only.
+      onlyReady: false,
       populateCasts: true,
       page,
       limit,
@@ -648,6 +652,12 @@ export class AdminUploadService {
 
     if (videoUploadDocument == null) {
       throw new OperationalError('Not found', 404)
+    }
+
+    if (!videoUploadDocument.isTranscoded) {
+      // The admin polls this endpoint while processing. Reconcile the exact
+      // upload immediately as a fallback to the background batch worker.
+      await CronTaskHandlers.updateVideoUploadDoc(videoUploadDocument)
     }
 
     return videoUploadDocument.isTranscoded

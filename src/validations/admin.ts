@@ -321,6 +321,16 @@ export const addFeaturedContentSchema = {
   }),
 }
 
+export const replaceTopTenSchema = {
+  body: Joi.object({
+    videoIds: Joi.array()
+      .items(MONGO_DB_OBJECT_ID_SCHEMA.required())
+      .max(10)
+      .unique()
+      .required(),
+  }),
+}
+
 export const addGenreSchema = {
   body: Joi.object({
     name: STRING_SCHEMA.required(),

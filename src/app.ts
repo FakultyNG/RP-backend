@@ -96,6 +96,44 @@ export const reeplayApp = () => {
       res.send(manifest)
     }),
   )
+  app.get(
+    '/media/video/:token',
+    Catch.async(async (req, res) => {
+      const key = MediaAccess.getVideoPlaybackKey(req.params.token)
+      const range = typeof req.headers.range === 'string' ? req.headers.range : undefined
+      let video
+      try {
+        video = await S3.getVideoObject(key, range)
+      } catch (error: any) {
+        if (
+          error?.name === 'NoSuchKey' ||
+          error?.name === 'NotFound' ||
+          error?.$metadata?.httpStatusCode === 404
+        ) {
+          throw new OperationalError('Video file not found', 404)
+        }
+        throw error
+      }
+
+      if (!video.Body) throw new OperationalError('Video data is unavailable', 404)
+
+      video.ContentType && res.type(video.ContentType)
+      video.ContentLength && res.setHeader('Content-Length', video.ContentLength)
+      video.ContentRange && res.setHeader('Content-Range', video.ContentRange)
+      video.ETag && res.setHeader('ETag', video.ETag)
+      res.setHeader('Accept-Ranges', video.AcceptRanges ?? 'bytes')
+      res.setHeader('Cache-Control', 'private, no-store')
+      if (range && video.ContentRange) res.status(206)
+
+      const body = video.Body as typeof video.Body & { pipe?: (target: typeof res) => void }
+      if (typeof body.pipe === 'function') {
+        body.pipe(res)
+        return
+      }
+
+      res.send(Buffer.from(await video.Body.transformToByteArray()))
+    }),
+  )
   app.get('/openapi.json', (_, res) => res.sendFile(openApiPath))
   app.use(
     '/api-docs',

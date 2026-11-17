@@ -11,6 +11,7 @@ import {
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3'
 import { VideoUploadSchema } from '../../models/videoupload.model'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 export class S3 {
   static upload = (params: Options['params']) => {
@@ -31,13 +32,24 @@ export class S3 {
     return AwsUtils.clients.s3.send(command)
   }
 
-  static getVideoObject = async (Key: string) => {
+  static getVideoObject = async (Key: string, Range?: string) => {
     const command = new GetObjectCommand({
       Key,
       Bucket: AwsUtils.buckets.reeplay,
+      Range,
     })
     return AwsUtils.clients.s3.send(command)
   }
+
+  static getSignedVideoObjectUrl = (Key: string, expiresIn = 86400) =>
+    getSignedUrl(
+      AwsUtils.clients.s3,
+      new GetObjectCommand({
+        Key,
+        Bucket: AwsUtils.buckets.reeplay,
+      }),
+      { expiresIn },
+    )
 
   static objectExists = async (Key: string, Bucket = AwsUtils.buckets.reeplay) => {
     try {

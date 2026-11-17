@@ -29,6 +29,7 @@ export class SharedRoutes {
     vodsRouter.get('/suggestions', SharedController.randomSuggestions)
     vodsRouter.get('/personalized', SharedController.getPersonalizedVods)
     vodsRouter.get('/related/:vodId', SharedController.getRelatedVods)
+    vodsRouter.get('/top-10', SharedController.fetchTopTen)
     vodsRouter.get('/category/:catId', SharedController.fetchVidsForCategory)
     vodsRouter.get('/similar-by-cast/:castId', SharedController.getSimilarByCastId)
     vodsRouter.get('/seasons/:vidId', AdminUploadController.fetchSeasonsAndEpisodes)
