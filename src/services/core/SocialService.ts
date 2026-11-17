@@ -70,6 +70,11 @@ type CreateRating = {
 
 export class SocialService {
   static CUReaction = async ({ commentId, reaction, authorId }: AddReaction) => {
+    const commentExists = await CommentModel.exists({ _id: commentId })
+    if (commentExists === null) {
+      throw new OperationalError('Comment not found', 404)
+    }
+
     const reactionDocument = await ReactionModel.findOneAndUpdate(
       {
         userId: authorId,
@@ -86,8 +91,36 @@ export class SocialService {
     return { reactionId: reactionDocument._id }
   }
 
-  static deleteReaction = async (reactionId: string) => {
-    await ReactionModel.findByIdAndDelete(reactionId)
+  static deleteReaction = async (reactionId: string, userId: string) => {
+    const reaction = await ReactionModel.findOneAndDelete({ _id: reactionId, userId })
+    if (reaction === null) {
+      throw new OperationalError('Reaction not found', 404)
+    }
+  }
+
+  protected static _assertParentExists = async (parentType: string, parentId: string) => {
+    const parentModels = {
+      vod: VideoModel,
+      episode: EpisodeModel,
+      live: LiveModel,
+      season: SeasonModel,
+    } as const
+    const model = parentModels[parentType as keyof typeof parentModels]
+
+    if (model === undefined || (await model.exists({ _id: parentId })) === null) {
+      throw new OperationalError('Comment parent not found', 404)
+    }
+  }
+
+  protected static _enforceCommentRateLimit = async (authorId: string) => {
+    const oneMinuteAgo = new Date(Date.now() - 60_000)
+    const recentComments = await CommentModel.countDocuments({
+      userId: authorId,
+      createdAt: { $gte: oneMinuteAgo },
+    })
+    if (recentComments >= 10) {
+      throw new OperationalError('Too many comments. Please wait a moment and try again.', 429)
+    }
   }
 
   protected static _incParentCommentsCount = async ({
@@ -137,9 +170,14 @@ export class SocialService {
     { message, parentId, parentType, authorId }: AddCommentInput,
     session: MaybeSession,
   ) => {
+    await Promise.all([
+      this._assertParentExists(parentType, parentId),
+      this._enforceCommentRateLimit(authorId),
+    ])
+
     const comment = await new CommentModel({
       userId: authorId,
-      message,
+      message: message.trim(),
       parentType,
       parentId,
     }).save({ session })
@@ -161,9 +199,36 @@ export class SocialService {
     { parentCommentId, message, authorId, parentType, parentId, parentReplyId }: AddReplyInput,
     session: MaybeSession,
   ) => {
+    await Promise.all([
+      this._assertParentExists(parentType, parentId),
+      this._enforceCommentRateLimit(authorId),
+    ])
+
+    const parentComment = await CommentModel.findOne({
+      _id: parentCommentId,
+      parentId,
+      parentType,
+      parentCommentId: { $exists: false },
+    })
+    if (parentComment === null) {
+      throw new OperationalError('Parent comment not found', 404)
+    }
+
+    if (parentReplyId) {
+      const parentReply = await CommentModel.exists({
+        _id: parentReplyId,
+        parentCommentId,
+        parentId,
+        parentType,
+      })
+      if (parentReply === null) {
+        throw new OperationalError('Parent reply not found', 404)
+      }
+    }
+
     const reply = await new CommentModel({
       userId: authorId,
-      message,
+      message: message.trim(),
       parentCommentId,
       parentReplyId,
       parentId,
@@ -183,53 +248,53 @@ export class SocialService {
   static addReply = async (input: AddReplyInput) =>
     await withMongoDBSession(this._addReplyTransaction, input)
 
-  static updateComment = async (commentId: string, message: string) => {
-    const comment = await CommentModel.findByIdAndUpdate(commentId, { message }, { new: true })
+  static updateComment = async (commentId: string, message: string, userId: string) => {
+    const comment = await CommentModel.findOneAndUpdate(
+      { _id: commentId, userId },
+      { message: message.trim() },
+      { new: true, runValidators: true },
+    )
 
     if (comment == null) {
-      throw new OperationalError('Invalid comment ID', 400)
+      throw new OperationalError('Comment not found', 404)
     }
 
     return comment
   }
 
-  protected static _deleteCommentTransaction = async (commentId: string, session: MaybeSession) => {
-    const [totalRepliesResult, deleteCommentResult] = await Promise.allSettled([
-      CommentsRepo.fetchTotalRepliesCountByCommentId(commentId),
-      CommentModel.findByIdAndDelete(commentId, { session }),
-    ])
-
-    if (totalRepliesResult.status === 'rejected') {
-      throw totalRepliesResult.reason
-    }
-
-    if (deleteCommentResult.status === 'rejected') {
-      throw deleteCommentResult.reason
-    }
-
-    const deletedComment = deleteCommentResult.value
-    const [repliesCount] = totalRepliesResult.value
-
+  protected static _deleteCommentTransaction = async (
+    { commentId, userId }: { commentId: string; userId: string },
+    session: MaybeSession,
+  ) => {
+    const deletedComment = await CommentModel.findOneAndDelete(
+      { _id: commentId, userId },
+      { session },
+    )
     if (deletedComment === null) {
-      throw new OperationalError('Invalid comment ID', 400)
+      throw new OperationalError('Comment not found', 404)
     }
 
-    // delete replies
-    await CommentModel.deleteMany({ parentCommentId: deletedComment._id }, { session })
-
-    const totalReplies = repliesCount?.totalReplies || 0
-    const totalDeletedComments = totalReplies + 1
+    const replies = await CommentModel.find(
+      { parentCommentId: deletedComment._id },
+      { _id: 1 },
+      { session },
+    )
+    const deletedIds = [deletedComment._id, ...replies.map(reply => reply._id)]
+    await Promise.all([
+      CommentModel.deleteMany({ _id: { $in: replies.map(reply => reply._id) } }, { session }),
+      ReactionModel.deleteMany({ commentId: { $in: deletedIds } }, { session }),
+    ])
 
     await this._incParentCommentsCount({
       comment: deletedComment,
       session,
       action: 'DELETE',
-      incCount: -Number(totalDeletedComments),
+      incCount: -deletedIds.length,
     })
   }
 
-  static deleteComment = async (commentId: string) => {
-    await withMongoDBSession(this._deleteCommentTransaction, commentId)
+  static deleteComment = async (commentId: string, userId: string) => {
+    await withMongoDBSession(this._deleteCommentTransaction, { commentId, userId })
   }
 
   static getComments = async ({ query, parentId, currentUserId }: GetCommentsInput) => {

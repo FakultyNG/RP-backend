@@ -1,4 +1,4 @@
-import { Aggregate, PipelineStage } from 'mongoose'
+import { Aggregate, PipelineStage, Types } from 'mongoose'
 import { CommentModel } from '../models/comments.model'
 import { MongoDBObjectId } from '../types/general'
 import env from '../env'
@@ -50,7 +50,7 @@ export class CommentsRepo {
     const res = CommentModel.aggregate([
       {
         $match: {
-          $expr: { $eq: ['$_id', { $toObjectId: commentId }] },
+          _id: new Types.ObjectId(commentId),
         },
       },
 
@@ -82,7 +82,7 @@ export class CommentsRepo {
       limit: 1,
       userId,
       match: {
-        $match: { $expr: { $eq: ['$_id', { $toObjectId: commentId }] } },
+        $match: { _id: new Types.ObjectId(commentId) },
       },
     })
   }
@@ -93,7 +93,7 @@ export class CommentsRepo {
       limit: 1,
       userId,
       match: {
-        $match: { $expr: { $eq: ['$_id', { $toObjectId: commentId }] } },
+        $match: { _id: new Types.ObjectId(commentId) },
       },
     })
   }
@@ -104,7 +104,7 @@ export class CommentsRepo {
       limit,
       userId,
       match: {
-        $match: { $expr: { $eq: ['$parentId', { $toObjectId: parentId }] } },
+        $match: { parentId: new Types.ObjectId(parentId) },
       },
     })
   }
@@ -115,7 +115,7 @@ export class CommentsRepo {
       limit,
       userId,
       match: {
-        $match: { $expr: { $eq: ['$parentCommentId', { $toObjectId: parentCommentId }] } },
+        $match: { parentCommentId: new Types.ObjectId(parentCommentId) },
       },
     })
   }

@@ -11,6 +11,10 @@ const commentSchema = new Schema(
 
     message: {
       type: String,
+      required: true,
+      trim: true,
+      minlength: 1,
+      maxlength: 1000,
     },
 
     parentCommentId: {
@@ -40,6 +44,10 @@ const commentSchema = new Schema(
     timestamps: true,
   },
 )
+
+commentSchema.index({ parentId: 1, parentCommentId: 1, _id: -1 })
+commentSchema.index({ parentCommentId: 1, _id: -1 })
+commentSchema.index({ userId: 1, createdAt: -1 })
 
 export const CommentModel = model('comments', commentSchema)
 export type CommentSchema = InferSchemaType<typeof commentSchema>

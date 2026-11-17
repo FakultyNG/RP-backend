@@ -12,7 +12,7 @@ export class SocialsController {
     const user = GetDefined.loggedInUser(req.user)
     denyGuestUser(user)
 
-    await SocialService.deleteReaction(req.params.reactionId)
+    await SocialService.deleteReaction(req.params.reactionId, user._id.toString())
 
     sendResponse({
       res,
@@ -108,8 +108,13 @@ export class SocialsController {
   })
 
   static updateComment = Catch.async(async (req, res) => {
-    denyGuestUser(GetDefined.loggedInUser(req.user))
-    const comment = await SocialService.updateComment(req.params.commentId, req.body.message)
+    const user = GetDefined.loggedInUser(req.user)
+    denyGuestUser(user)
+    const comment = await SocialService.updateComment(
+      req.params.commentId,
+      req.body.message,
+      user._id.toString(),
+    )
 
     sendResponse({
       res,
@@ -119,8 +124,9 @@ export class SocialsController {
   })
 
   static deleteComment = Catch.async(async (req, res) => {
-    denyGuestUser(GetDefined.loggedInUser(req.user))
-    await SocialService.deleteComment(req.params.commentId)
+    const user = GetDefined.loggedInUser(req.user)
+    denyGuestUser(user)
+    await SocialService.deleteComment(req.params.commentId, user._id.toString())
 
     sendResponse({
       res,
