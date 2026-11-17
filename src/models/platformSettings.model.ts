@@ -13,6 +13,10 @@ const schema = new Schema(
       default: false,
       required: true,
     },
+    giftCardAuthorizationCodeHash: {
+      type: String,
+      select: false,
+    },
   },
   { timestamps: true },
 )

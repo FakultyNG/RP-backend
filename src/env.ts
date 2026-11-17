@@ -82,7 +82,6 @@ export const env = getValidEnv({
   },
 
   // new
-  GIFT_CARD_AUTHORIZATION_TOKEN: process.env.GIFT_CARD_AUTHORIZATION_TOKEN ?? 'abcdef',
 
   // media
   KEY_PAIR_ID: process.env.KEY_PAIR_ID,

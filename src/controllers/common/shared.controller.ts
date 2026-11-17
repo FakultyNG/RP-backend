@@ -60,6 +60,18 @@ type LiveEventsType =
   | 'podcasts'
   | 'podcasts popular'
 
+const interleaveSuggestions = <T, U>(primary: T[], secondary: U[]): Array<T | U> => {
+  const suggestions: Array<T | U> = []
+  const maxLength = Math.max(primary.length, secondary.length)
+
+  for (let index = 0; index < maxLength; index += 1) {
+    if (primary[index] !== undefined) suggestions.push(primary[index])
+    if (secondary[index] !== undefined) suggestions.push(secondary[index])
+  }
+
+  return suggestions
+}
+
 export class SharedController extends UploadMediaUtils {
   static getPersonalizedVods = Catch.async(async ({ query, user }, res) => {
     const currentUser = GetDefined.loggedInUser(user)
@@ -593,36 +605,64 @@ export class SharedController extends UploadMediaUtils {
   static randomSuggestions = Catch.async(async ({ query, user }, res) => {
     const currentUser = GetDefined.loggedInUser(user)
     const { videoQuality } = currentUser
-    const { limit } = QueryParamsFeatures.paginagteParams(query)
+    const requestedLimit = QueryParamsFeatures.paginagteParams(query).limit
+    const limit = Math.min(Math.max(requestedLimit, 1), 20)
+    const guest = isGuestUser(currentUser)
 
-    const [vodsRepoReult, liveRepoResult] = await Promise.allSettled([
-      VideoRepo.fetchRandom(limit),
-      LiveRepo.fetchRandom(limit),
+    const [personalizedVods, liveCandidates] = await Promise.all([
+      PersonalizedContentService.getRecommendations(
+        currentUser,
+        {},
+        1,
+        guest ? 100 : limit,
+      ),
+      LiveRepo.getMostEngaged(1, limit, {
+        $match: guest ? { active: true, vid_class: 'free' } : { active: true },
+      }),
     ])
 
-    if (vodsRepoReult.status == 'rejected') {
-      throw vodsRepoReult.reason
+    let vodCandidates = personalizedVods
+      .filter(vod => !guest || vod.vidClass === 'free')
+      .slice(0, limit)
+
+    // A small catalogue or a new account may not yield enough personalized
+    // results. Random discovery is deliberately used only as a fallback.
+    if (vodCandidates.length < limit) {
+      const fallbackVods = (await VideoRepo.fetchRandom(limit * 2)).filter(
+        vod => !guest || vod.vidClass === 'free',
+      )
+      const seen = new Set(vodCandidates.map(vod => vod._id.toString()))
+
+      vodCandidates = [
+        ...vodCandidates,
+        ...fallbackVods.filter(vod => {
+          const id = vod._id.toString()
+          if (seen.has(id)) return false
+          seen.add(id)
+          return true
+        }),
+      ].slice(0, limit)
     }
 
-    if (liveRepoResult.status == 'rejected') {
-      throw liveRepoResult.reason
-    }
+    const vods = MovieMediaSourcesUtils.resolveMediaSources(
+      filterGuestVods(vodCandidates, currentUser),
+      videoQuality,
+    )
+    const lives = await LiveMediaSourcesUtils.resolveSources(
+      filterGuestLives(liveCandidates, currentUser),
+      videoQuality,
+    )
 
     const response = {
-      vods: MovieMediaSourcesUtils.resolveMediaSources(
-        filterGuestVods(vodsRepoReult.value, currentUser),
-        videoQuality,
-      ),
-      lives: await LiveMediaSourcesUtils.resolveSources(
-        filterGuestLives(liveRepoResult.value, currentUser),
-        videoQuality,
-      ),
+      vods,
+      lives,
+      items: interleaveSuggestions(vods, lives),
     }
 
     sendResponse({
       res,
       data: response,
-      message: '',
+      message: 'suggestions fetched successfully',
     })
   })
 

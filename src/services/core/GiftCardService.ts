@@ -1,5 +1,4 @@
 import { ClientSession } from 'mongoose'
-import env from '../../env'
 import { GiftCardMerchantModel } from '../../models/giftcard.merchant.model'
 import { GiftCard, GiftCardModel } from '../../models/giftcard.model'
 import { WalletRepo } from '../../repositories/WalletRepo'
@@ -15,6 +14,7 @@ import {
 import { genRandUniqId } from '../../utils/strGen'
 import { Password } from '../../utils/Password'
 import { GiftCardRepo } from '../../repositories/GiftCardRepo'
+import { PlatformSettingsService } from './PlatformSettingsService'
 
 interface CreateGiftCardInput {
   currentAdmin: LoggedInUser
@@ -198,7 +198,7 @@ export class GiftCardService {
   }
 
   static activate = async (code: string, adminAuthToken: string) => {
-    if (adminAuthToken !== env.GIFT_CARD_AUTHORIZATION_TOKEN) {
+    if (!(await PlatformSettingsService.verifyGiftCardAuthorizationCode(adminAuthToken))) {
       throw new OperationalError('Invalid auth code', 403)
     }
 

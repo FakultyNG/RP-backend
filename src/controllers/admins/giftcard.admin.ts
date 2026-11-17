@@ -2,6 +2,7 @@ import { GiftCardService } from '../../services/core/GiftCardService'
 import { Catch } from '../../utils/Catch'
 import { GetDefined } from '../../utils/GetDefined'
 import { sendResponse } from '../../utils/responder'
+import { PlatformSettingsService } from '../../services/core/PlatformSettingsService'
 
 export class AdminGiftCardController {
   static create = Catch.async(async ({ body: { amount, currency }, user }, res) => {
@@ -35,6 +36,24 @@ export class AdminGiftCardController {
       res,
       message: 'activated',
     })
+  })
+
+  static activateSecurely = Catch.async(async ({ params, body }, res) => {
+    await GiftCardService.activate(params.code, body.authorizationCode)
+    sendResponse({ res, message: 'Gift card activated' })
+  })
+
+  static getAuthorizationCodeStatus = Catch.async(async (_, res) => {
+    sendResponse({
+      res,
+      message: 'Gift card authorization code status fetched',
+      data: { configured: await PlatformSettingsService.hasGiftCardAuthorizationCode() },
+    })
+  })
+
+  static changeAuthorizationCode = Catch.async(async ({ body }, res) => {
+    await PlatformSettingsService.setGiftCardAuthorizationCode(body.newCode)
+    sendResponse({ res, message: 'Gift card authorization code changed' })
   })
 
   static deleteById = Catch.async(async ({ params }, res) => {

@@ -31,8 +31,8 @@ const resolveParent = async (parentType: string | undefined, parentId: unknown) 
   }
 
   if (parentType?.startsWith('live')) {
-    const live = await LiveModel.findById(id).select('title name').lean()
-    return { title: live?.title ?? live?.name ?? 'Deleted live content' }
+    const live = await LiveModel.findById(id).select('title').lean()
+    return { title: live?.title ?? 'Deleted live content' }
   }
 
   const video = await VideoModel.findById(id).select('title type').lean()
@@ -51,7 +51,7 @@ const report = async () => {
       uploadType: upload.parentType ?? 'unassigned',
       hlsStatus: upload.hlsStatus,
       reason: upload.hlsError ?? 'Not submitted for HLS conversion',
-      ...(await resolveParent(upload.parentType, upload.parentId)),
+      ...(await resolveParent(upload.parentType ?? undefined, upload.parentId)),
     })),
   )
 
@@ -71,4 +71,3 @@ if (require.main === module) {
     }
   })()
 }
-
