@@ -22,7 +22,7 @@ export const addEpisodeSchema = Joi.object({
   video: Joi.object().optional(), // file
   trailer: Joi.object().optional(), // file
 })
-  .xor('trailerLink', 'trailer')
+  .oxor('trailerLink', 'trailer')
   .xor('video', 'videoLink')
 
 export const editEpisodeSchema = Joi.object({
@@ -90,7 +90,7 @@ export const addSeriesSchema = Joi.object({
   vidClass: VIDEO_CLASS_SCHEMA.required(),
   category: MONGO_DB_OBJECT_ID_ARRAY_SCHEMA.required(),
   releasedDate: ISO_STRING_SCHEMA.required(),
-  runtime: STRING_SCHEMA.required(),
+  runtime: STRING_SCHEMA.optional(),
   primaryColor: STRING_SCHEMA.required(),
   defaultRating: STRING_SCHEMA.pattern(FLOATS_REG).required(),
 
@@ -122,7 +122,7 @@ export const addSeriesSchema = Joi.object({
     then: Joi.number().strict().required(),
     otherwise: Joi.forbidden(),
   }),
-}).xor('trailerLink', 'trailer')
+}).oxor('trailerLink', 'trailer')
 
 export const addMusicVideoSchema = Joi.object({
   title: STRING_SCHEMA.required(),
@@ -193,6 +193,7 @@ export const editVideoSchema = Joi.object({
 
   video: Joi.object(), // file
   videoLink: STRING_SCHEMA,
+  removeVideo: Joi.boolean(),
 
   active: Joi.boolean(),
   upcoming: Joi.boolean(),
@@ -200,7 +201,10 @@ export const editVideoSchema = Joi.object({
 
   trailerLink: STRING_SCHEMA, // file
   trailer: Joi.object(),
+  removeTrailer: Joi.boolean(),
 })
+  .oxor('videoLink', 'video', 'removeVideo')
+  .oxor('trailerLink', 'trailer', 'removeTrailer')
 
 export const addSubtitleSchema = Joi.object({
   parentId: MONGO_DB_OBJECT_ID_SCHEMA.required(),

@@ -579,6 +579,29 @@ export class SharedController extends UploadMediaUtils {
     })
   })
 
+  static getRelatedVods = Catch.async(async ({ query, user, params }, res) => {
+    const currentUser = GetDefined.loggedInUser(user)
+    const { page, limit } = QueryParamsFeatures.paginagteParams(query)
+    const vods = await VideoRepo.fetchRelated({
+      vodId: params.vodId,
+      page,
+      limit: Math.min(limit, 30),
+    })
+
+    if (vods === null) {
+      throw new OperationalError('VOD not found', 404)
+    }
+
+    sendResponse({
+      res,
+      data: MovieMediaSourcesUtils.resolveMediaSources(
+        filterGuestVods(vods, currentUser),
+        currentUser.videoQuality,
+      ),
+      message: 'related contents fetched successfully',
+    })
+  })
+
   static getByCategoryIdAndAndGenreId = Catch.async(async ({ query, user, params }, res) => {
     const { page, limit } = QueryParamsFeatures.paginagteParams(query)
 

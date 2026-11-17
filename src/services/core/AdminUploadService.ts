@@ -130,26 +130,6 @@ export class AdminUploadService {
     if (aggrRes.length == 0) {
       throw new OperationalError('invalid season Id', 404)
     }
-
-    const [
-      {
-        previousEpisodeTrailerLink,
-        previousEpisodeVideoLink,
-        isLastEpisodeTrailerReady,
-        isLastEpisodeVideoReady,
-        totalPreviousEpisodes,
-      },
-    ] = aggrRes
-
-    if (totalPreviousEpisodes === 0) return
-
-    if (previousEpisodeTrailerLink === null && isLastEpisodeTrailerReady === false) {
-      throw new OperationalError("Last Episode's trailer is still processing", 403)
-    }
-
-    if (previousEpisodeVideoLink === null && isLastEpisodeVideoReady === false) {
-      throw new OperationalError("Last Episode's video is still processing", 403)
-    }
   }
 
   protected static _getVideoDocument = ({ data, type, adminId }: AddVideoParams) => {
@@ -413,7 +393,7 @@ export class AdminUploadService {
       videoUploadDocument.parentType = 'episode-trailer'
       episodeDocument.trailerUpload = videoUploadDocument._id
       episodeDocument.isTrailerReady = false
-      videoUploadDocument.save({ session })
+      await videoUploadDocument.save({ session })
     }
 
     if (data.video) {
@@ -423,7 +403,7 @@ export class AdminUploadService {
       videoUploadDocument.parentType = 'episode'
       episodeDocument.videoUpload = videoUploadDocument._id
       episodeDocument.isVideoReady = false
-      videoUploadDocument.save({ session })
+      await videoUploadDocument.save({ session })
     }
 
     // await this._uploadEpisodeVideos({ data, episode }, session)
@@ -467,18 +447,18 @@ export class AdminUploadService {
         }
       : undefined
 
-    videoDocument.description = data.description || videoDocument.description
-    videoDocument.amount = data.amount || videoDocument.amount
-    videoDocument.title = data.title || videoDocument.title
-    videoDocument.primaryColor = data.primaryColor || videoDocument.primaryColor
+    if (data.description !== undefined) videoDocument.description = data.description
+    if (data.amount !== undefined) videoDocument.amount = data.amount
+    if (data.currency !== undefined) videoDocument.currency = data.currency
+    if (data.title !== undefined) videoDocument.title = data.title
+    if (data.primaryColor !== undefined) videoDocument.primaryColor = data.primaryColor
     if (typeof data.upcoming === 'boolean') {
       videoDocument.upcoming = data.upcoming
     }
     videoDocument.adminId = toObjectId(adminId)
-    videoDocument.description = data.description || videoDocument.description
-    videoDocument.vidClass = (data.vidClass as any) || videoDocument.vidClass
-    videoDocument.artistName = data.artistName || videoDocument.artistName
-    videoDocument.pg = data.pg || videoDocument.pg
+    if (data.vidClass !== undefined) videoDocument.vidClass = data.vidClass as any
+    if (data.artistName !== undefined) videoDocument.artistName = data.artistName
+    if (data.pg !== undefined) videoDocument.pg = data.pg
 
     const replaceReferences = (references: string[]) =>
       [...new Set(references)].map(toObjectId)
@@ -511,11 +491,9 @@ export class AdminUploadService {
 
     const expiry = videoDocument.expiryDate ?? undefined
 
-    videoDocument.videoLink = data.videoLink || videoDocument.videoLink
-    videoDocument.trailerLink = data.trailerLink || videoDocument.trailerLink
-    videoDocument.runtime = data.runtime || videoDocument.runtime
-    videoDocument.active = data.active || videoDocument.active
-    videoDocument.showViews = data.showViews || videoDocument.showViews
+    if (data.runtime !== undefined) videoDocument.runtime = data.runtime
+    if (data.active !== undefined) videoDocument.active = data.active
+    if (data.showViews !== undefined) videoDocument.showViews = data.showViews
     if (data.portraitPoster) {
       const potraitUpload = await MediaManagement.storeImageAndSubtitle(
         data.portraitPoster,
@@ -544,7 +522,14 @@ export class AdminUploadService {
       videoDocument.markModified('landscapePhoto')
     }
 
-    if (data.video) {
+    if (data.removeVideo) {
+      if (videoDocument.videoUpload) {
+        void Purge.videoUploadById(videoDocument.videoUpload)
+      }
+      videoDocument.videoUpload = undefined
+      videoDocument.videoLink = undefined
+      videoDocument.isVideoReady = false
+    } else if (data.video) {
       const videoUpload = await MediaManagement.uploadAndInitiateMediaConvert(data.video, expiry)
 
       if (videoDocument.videoUpload) {
@@ -556,10 +541,25 @@ export class AdminUploadService {
       videoUploadDocument.parentType = 'vod'
       await videoUploadDocument.save({ session })
       videoDocument.videoUpload = videoUploadDocument._id
+      videoDocument.videoLink = undefined
       videoDocument.isVideoReady = false
+    } else if (data.videoLink !== undefined) {
+      if (videoDocument.videoUpload) {
+        void Purge.videoUploadById(videoDocument.videoUpload)
+      }
+      videoDocument.videoUpload = undefined
+      videoDocument.videoLink = data.videoLink
+      videoDocument.isVideoReady = true
     }
 
-    if (data.trailer) {
+    if (data.removeTrailer) {
+      if (videoDocument.trailerUpload) {
+        void Purge.videoUploadById(videoDocument.trailerUpload)
+      }
+      videoDocument.trailerUpload = undefined
+      videoDocument.trailerLink = undefined
+      videoDocument.isTrailerReady = false
+    } else if (data.trailer) {
       const trailerUpload = await MediaManagement.uploadAndInitiateMediaConvert(
         data.trailer,
         expiry,
@@ -573,8 +573,16 @@ export class AdminUploadService {
       videoUploadDocument.parentId = videoDocument._id
       videoUploadDocument.parentType = 'vod-trailer'
       videoDocument.trailerUpload = videoUploadDocument._id
+      videoDocument.trailerLink = undefined
       await videoUploadDocument.save({ session })
       videoDocument.isTrailerReady = false
+    } else if (data.trailerLink !== undefined) {
+      if (videoDocument.trailerUpload) {
+        void Purge.videoUploadById(videoDocument.trailerUpload)
+      }
+      videoDocument.trailerUpload = undefined
+      videoDocument.trailerLink = data.trailerLink
+      videoDocument.isTrailerReady = true
     }
 
     await videoDocument.save({ session })
@@ -700,6 +708,8 @@ export type MovieData = {
   portraitPoster: MulterFile
   trailer?: MulterFile
   video?: MulterFile
+  removeTrailer?: boolean
+  removeVideo?: boolean
 }
 
 export type AddSeasonParams = {

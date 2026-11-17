@@ -151,17 +151,24 @@ export class SocialsController {
   })
 
   static getRatings = Catch.async(async (req, res) => {
+    const user = GetDefined.loggedInUser(req.user)
     sendResponse({
       res,
       message: 'rating fetched successfully',
-      data: await SocialService.getRatings(req.params.parentId),
+      data: await SocialService.getRatings(
+        req.params.parentId,
+        user.role === 'guest' ? undefined : user._id.toString(),
+      ),
     })
   })
 
   static updateRating = Catch.async(async (req, res) => {
+    const user = GetDefined.loggedInUser(req.user)
+    denyGuestUser(user)
     const rating = await SocialService.updateRating({
       ...req.body,
       ratingId: req.params.ratingId,
+      userId: user._id.toString(),
     })
 
     sendResponse({
@@ -172,7 +179,9 @@ export class SocialsController {
   })
 
   static deleteRating = Catch.async(async (req, res) => {
-    await SocialService.deleteRating(req.params.ratingId)
+    const user = GetDefined.loggedInUser(req.user)
+    denyGuestUser(user)
+    await SocialService.deleteRating(req.params.ratingId, user._id.toString())
 
     sendResponse({
       res,

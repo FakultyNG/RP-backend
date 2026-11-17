@@ -6,6 +6,7 @@ import { SettingsModel } from '../../models/userSettings.model'
 import { VideoModel } from '../../models/videos.model'
 import { ViewModel } from '../../models/view.model'
 import { WatchedModel } from '../../models/watched.model'
+import { RatingModel } from '../../models/rating.model'
 import { VideoRepo, VodCardResponse } from '../../repositories/VideoRepo'
 import { LoggedInUser } from '../../types'
 import { isGuestUser } from '../../utils/guestAccess'
@@ -33,6 +34,14 @@ const addAffinity = (map: Map<string, number>, ids: unknown[], weight: number) =
     const key = String(id)
     map.set(key, (map.get(key) ?? 0) + weight)
   })
+}
+
+const ratingAffinityWeight = (rate: number) => {
+  if (rate >= 5) return 4
+  if (rate >= 4) return 2.5
+  if (rate === 3) return 0.5
+  if (rate === 2) return -1.5
+  return -3
 }
 
 export class PersonalizedContentService {
@@ -87,7 +96,7 @@ export class PersonalizedContentService {
     explicitGenreIds.forEach(id => genreAffinity.set(id, 6))
     explicitCategoryIds.forEach(id => categoryAffinity.set(id, 6))
 
-    const [watched, likes, views] = await Promise.all([
+    const [watched, likes, views, ratings] = await Promise.all([
       WatchedModel.find({ userId: currentUser._id, parentType: 'vod' })
         .sort({ updatedAt: -1 })
         .limit(30)
@@ -103,6 +112,11 @@ export class PersonalizedContentService {
         .limit(30)
         .select('content')
         .lean(),
+      RatingModel.find({ userId: currentUser._id, parentType: 'vod' })
+        .sort({ updatedAt: -1 })
+        .limit(30)
+        .select('parentId rate')
+        .lean(),
     ])
 
     const contentWeights = new Map<string, number>()
@@ -117,6 +131,10 @@ export class PersonalizedContentService {
     views.forEach(item => {
       const id = item.content.toString()
       contentWeights.set(id, (contentWeights.get(id) ?? 0) + 0.5)
+    })
+    ratings.forEach(item => {
+      const id = item.parentId.toString()
+      contentWeights.set(id, (contentWeights.get(id) ?? 0) + ratingAffinityWeight(item.rate))
     })
     ;(settings?.watchlist ?? []).forEach(id => {
       if (!Types.ObjectId.isValid(id)) return

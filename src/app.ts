@@ -13,6 +13,7 @@ import { Catch } from './utils/Catch'
 import { OperationalError } from './utils/OperationalError'
 import { S3 } from './services/aws/s3'
 import { MediaAccess } from './services/media-access'
+import { SharePageController } from './controllers/common/sharePage.controller'
 
 const devTestRoute = (_: Request, res: Response) => {
   res.status(200).json({
@@ -48,6 +49,7 @@ export const reeplayApp = () => {
       database: ready ? 'connected' : 'disconnected',
     })
   })
+  app.get('/share/:type/:id', Catch.async(SharePageController.render))
   app.get(
     '/media/images/*',
     Catch.async(async (req, res) => {

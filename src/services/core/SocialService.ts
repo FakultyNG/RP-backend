@@ -15,9 +15,11 @@ import { ExpressRequestQuery, QueryParamsFeatures } from '../../utils/QueryParam
 
 import { MongoDBObjectId } from '../../types/general'
 import { RatingsRepo } from '../../repositories/ReatingsRepo'
+import { PaymentService } from './PaymentService'
 
 type UpdateRatingInput = {
   ratingId: string
+  userId: string
   comment?: string
   rate?: number
 }
@@ -323,20 +325,20 @@ export class SocialService {
     return replies
   }
 
-  protected static _computeRatingsParentStats = async (ratingsDocument: Rating | null) => {
-    if (ratingsDocument == null) return
-
-    switch (ratingsDocument.parentType) {
+  protected static _computeRatingsParentStats = async (
+    parentType: Rating['parentType'],
+    parentId: Rating['parentId'],
+  ) => {
+    switch (parentType) {
       case 'vod':
-        const [stats] = await RatingsRepo.parentRatingsStats(ratingsDocument.parentId.toString())
+        const [stats] = await RatingsRepo.parentRatingsStats(parentId.toString())
+        const totalStats = stats?.totalStats[0]
 
-        const result = await VideoModel.updateOne({ _id: ratingsDocument.parentId }, [
+        const result = await VideoModel.updateOne({ _id: parentId }, [
           {
             $set: {
-              averageRating: { $ifNull: [stats?.totalStats[0]?.averageRating, '$averageRating'] },
-              totalRatings: {
-                $ifNull: [stats?.totalStats[0]?.totalRatingsDocuments, '$totalRatings'],
-              },
+              averageRating: totalStats?.averageRating ?? '$defaultRating',
+              totalRatings: totalStats?.totalRatingsDocuments ?? 0,
             },
           },
         ])
@@ -354,44 +356,79 @@ export class SocialService {
 
   // ********* Ratings
   static addRating = async ({ userId, rate, parentId, parentType, comment }: CreateRating) => {
+    if (parentType !== 'vod') {
+      throw new OperationalError('Only VOD ratings are currently supported', 400)
+    }
+
+    const video = await VideoModel.findById(parentId).select('vidClass').lean()
+    if (video === null) {
+      throw new OperationalError('Invalid vod id', 404)
+    }
+
+    if (video.vidClass === 'premium' || video.vidClass === 'exclusive') {
+      const access = await PaymentService.checkHasValidContentPayment({
+        currentUserId: userId,
+        contentId: parentId,
+        contentType: 'vod',
+      })
+      if (!access.canView) {
+        throw new OperationalError('Watch access is required before rating this title', 403)
+      }
+    }
+
     const ratingsDocument = await RatingModel.findOneAndUpdate(
       {
         userId,
         parentId,
       },
       { parentType, comment, rate },
-      { new: true, upsert: true },
+      { new: true, upsert: true, runValidators: true },
     )
 
-    await this._computeRatingsParentStats(ratingsDocument)
+    await this._computeRatingsParentStats(ratingsDocument.parentType, ratingsDocument.parentId)
 
     return ratingsDocument
   }
 
-  static getRatings = async (parentId: string) => {
-    const [ratings] = await RatingsRepo.parentRatingsStats(parentId)
-    return ratings
+  static getRatings = async (parentId: string, userId?: string) => {
+    const [[ratings], myRating] = await Promise.all([
+      RatingsRepo.parentRatingsStats(parentId),
+      userId
+        ? RatingModel.findOne({ parentId, userId }).select('_id rate').lean()
+        : Promise.resolve(null),
+    ])
+
+    return {
+      totalStats: ratings?.totalStats ?? [],
+      groupStats: ratings?.groupStats ?? [],
+      myRating: myRating
+        ? { _id: myRating._id.toString(), rate: myRating.rate }
+        : null,
+    }
   }
 
-  static updateRating = async ({ ratingId, comment, rate }: UpdateRatingInput) => {
-    const ratingsDocument = await RatingModel.findById(ratingId)
+  static updateRating = async ({ ratingId, userId, comment, rate }: UpdateRatingInput) => {
+    const ratingsDocument = await RatingModel.findOne({ _id: ratingId, userId })
 
     if (ratingsDocument === null) {
-      throw new OperationalError('invalid rating Id', 404)
+      throw new OperationalError('Rating not found', 404)
     }
 
-    ratingsDocument.comment = comment ? comment : ratingsDocument.comment
-    ratingsDocument.rate = rate ? rate : ratingsDocument.rate
+    ratingsDocument.comment = comment ?? ratingsDocument.comment
+    ratingsDocument.rate = rate ?? ratingsDocument.rate
     await ratingsDocument.save()
-    this._computeRatingsParentStats(ratingsDocument)
+    await this._computeRatingsParentStats(ratingsDocument.parentType, ratingsDocument.parentId)
+    return ratingsDocument
   }
 
-  static deleteRating = async (ratingId: string) => {
-    const deletedRating = await RatingModel.findByIdAndDelete(ratingId)
+  static deleteRating = async (ratingId: string, userId: string) => {
+    const deletedRating = await RatingModel.findOneAndDelete({ _id: ratingId, userId })
 
     if (deletedRating === null) {
-      throw new OperationalError('invalid rating Id', 404)
+      throw new OperationalError('Rating not found', 404)
     }
+
+    await this._computeRatingsParentStats(deletedRating.parentType, deletedRating.parentId)
   }
 
   static totalCommentsCount = async (vodId: string) => {

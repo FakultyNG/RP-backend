@@ -61,6 +61,12 @@ type FetchSimilarByGenreIdInput = {
   limit: number
 }
 
+type FetchRelatedInput = {
+  vodId: string
+  page: number
+  limit: number
+}
+
 type ComputeTotalEngagementsInput = {
   session: MaybeSession
   id: StringOrObjectId
@@ -519,6 +525,11 @@ export class VideoRepo {
           'isVideoReady',
           'featuredPriority',
           'searchRelevance',
+          'relatedGenreMatches',
+          'relatedCategoryMatches',
+          'relatedCastMatches',
+          'relatedArtistMatch',
+          'relatedScore',
         ],
       },
 
@@ -584,6 +595,94 @@ export class VideoRepo {
       page,
       limit,
       sortStage: { $sort: { _id: -1 } },
+    })
+  }
+
+  static fetchRelated = async ({ vodId, page, limit }: FetchRelatedInput) => {
+    if (!Types.ObjectId.isValid(vodId)) return null
+
+    const source = await VideoModel.findById(vodId)
+      .select('type genre category cast artistName')
+      .lean()
+
+    if (source === null) return null
+
+    const genreIds = source.genre ?? []
+    const categoryIds = source.category ?? []
+    const castIds = source.cast ?? []
+    const normalizedArtist = source.artistName?.trim().toLowerCase() ?? ''
+
+    const relatedStages = [
+      {
+        $match: {
+          _id: { $ne: source._id },
+          type: source.type,
+          active: true,
+        },
+      },
+      {
+        $set: {
+          relatedGenreMatches: {
+            $size: {
+              $setIntersection: [{ $ifNull: ['$genre', []] }, genreIds],
+            },
+          },
+          relatedCategoryMatches: {
+            $size: {
+              $setIntersection: [{ $ifNull: ['$category', []] }, categoryIds],
+            },
+          },
+          relatedCastMatches: {
+            $size: {
+              $setIntersection: [{ $ifNull: ['$cast', []] }, castIds],
+            },
+          },
+          relatedArtistMatch: normalizedArtist
+            ? {
+                $cond: [
+                  {
+                    $eq: [
+                      { $toLower: { $ifNull: ['$artistName', ''] } },
+                      normalizedArtist,
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              }
+            : 0,
+        },
+      },
+      {
+        $set: {
+          relatedScore: {
+            $add: [
+              { $multiply: ['$relatedGenreMatches', 5] },
+              { $multiply: ['$relatedCategoryMatches', 3] },
+              { $multiply: ['$relatedCastMatches', 4] },
+              { $multiply: ['$relatedArtistMatch', 8] },
+              { $multiply: [{ $ifNull: ['$averageRating', 0] }, 0.35] },
+              { $log10: { $add: [{ $ifNull: ['$viewsCount', 0] }, 1] } },
+              { $log10: { $add: [{ $ifNull: ['$engagements', 0] }, 1] } },
+            ],
+          },
+        },
+      },
+    ] as PipelineStage[]
+
+    return this.fetchVideoAggr({
+      prevStages: relatedStages,
+      page,
+      limit,
+      sortStage: {
+        $sort: {
+          relatedScore: -1,
+          engagements: -1,
+          viewsCount: -1,
+          createdAt: -1,
+          _id: -1,
+        },
+      },
     })
   }
 

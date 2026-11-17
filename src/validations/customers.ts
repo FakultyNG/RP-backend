@@ -85,9 +85,9 @@ export const updateCommentSchema = {
 
 export const createRatingSchema = {
   body: Joi.object({
-    parentType: STRING_SCHEMA.valid('vod', 'episode').required(),
+    parentType: STRING_SCHEMA.valid('vod').required(),
     parentId: MONGO_DB_OBJECT_ID_SCHEMA.required(),
-    rate: Joi.number().min(0).max(5).required(),
+    rate: Joi.number().integer().min(1).max(5).required(),
     comment: STRING_SCHEMA.optional(),
   }),
 }
@@ -95,7 +95,7 @@ export const createRatingSchema = {
 export const updateRatingSchema = {
   body: Joi.object({
     comment: STRING_SCHEMA.optional(),
-    rate: Joi.number().min(0).max(5).optional(),
+    rate: Joi.number().integer().min(1).max(5).optional(),
   }).or('comment', 'rate'),
 }
 

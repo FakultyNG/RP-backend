@@ -76,6 +76,8 @@ export type MovieData = {
   portraitPoster: MulterFile
   trailer?: MulterFile
   video?: MulterFile
+  removeTrailer?: boolean
+  removeVideo?: boolean
 }
 
 export type AddSeasonParams = {
