@@ -17,7 +17,51 @@ type InterestPreferences = {
   categoryIds?: string[]
 }
 
+export type NotificationPreferences = {
+  allow_notifications?: boolean
+  new_services?: boolean
+  upcoming_events?: boolean
+  new_arrivals?: boolean
+  live_channels?: boolean
+}
+
+const notificationPreferenceKeys: Array<keyof NotificationPreferences> = [
+  'allow_notifications',
+  'new_services',
+  'upcoming_events',
+  'new_arrivals',
+  'live_channels',
+]
+
 export class CustomerSettingsService {
+  static setNotificationPreferences = async (
+    currentUser: LoggedInUser,
+    preferences: NotificationPreferences,
+  ) => {
+    denyGuestUser(currentUser)
+    const changes: NotificationPreferences = {}
+    notificationPreferenceKeys.forEach(key => {
+      if (typeof preferences[key] === 'boolean') changes[key] = preferences[key]
+    })
+    if (Object.keys(changes).length === 0) {
+      throw new OperationalError('At least one notification preference is required', 400)
+    }
+
+    const settings = await SettingsModel.findOneAndUpdate(
+      { user_id: currentUser._id },
+      { $set: changes },
+      { upsert: true, new: true },
+    ).select(notificationPreferenceKeys.join(' '))
+
+    return {
+      allow_notifications: settings.allow_notifications,
+      new_services: settings.new_services,
+      upcoming_events: settings.upcoming_events,
+      new_arrivals: settings.new_arrivals,
+      live_channels: settings.live_channels,
+    }
+  }
+
   static replaceInterests = async (
     currentUser: LoggedInUser,
     preferences: InterestPreferences,

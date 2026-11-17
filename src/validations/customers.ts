@@ -49,6 +49,16 @@ export const interestPreferencesSchema = {
   }),
 }
 
+export const notificationPreferencesSchema = {
+  body: Joi.object({
+    allow_notifications: Joi.boolean(),
+    new_services: Joi.boolean(),
+    upcoming_events: Joi.boolean(),
+    new_arrivals: Joi.boolean(),
+    live_channels: Joi.boolean(),
+  }).min(1),
+}
+
 export const createCommentSchema = {
   body: Joi.object({
     message: STRING_SCHEMA.required(),

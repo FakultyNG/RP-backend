@@ -5,20 +5,24 @@ import { sendResponse } from '../../utils/responder'
 
 export class AdminUsersController {
   static sendMainPushNotification = Catch.async(async ({ body, file, user }, res) => {
-    await AdminUsersService.sendAdminMainTopicPushNotification(
+    const delivery = await AdminUsersService.sendAdminMainTopicPushNotification(
       GetDefined.loggedInUser(user),
       {
         ...body,
         metadata: typeof body.metadata === 'string' ? JSON.parse(body.metadata) : {},
         type: body.type || 'MAIN_ADMIN_TOPIC_NOTIFICATION',
+        audience: body.audience || 'all',
       },
       file,
     )
 
     sendResponse({
       res,
-      data: null,
-      message: 'Notification broadcast sent',
+      data: delivery,
+      message:
+        delivery.targetedDevices === 0
+          ? 'Notification saved, but no enabled devices were registered'
+          : `Notification broadcast delivered to ${delivery.sent} device${delivery.sent === 1 ? '' : 's'}`,
     })
   })
 

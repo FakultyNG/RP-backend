@@ -26,17 +26,30 @@ export class PushNotificationService {
   static updateDeviceToken = async (currentUserId: string, data: Record<string, any>) => {
     const { device_token, device_id, device_type } = data
 
-    const previousDocument = await UserDeviceModel.findOneAndUpdate(
+    const previousDocument = await UserDeviceModel.findOne({ device_id })
+    const currentDocument = await UserDeviceModel.findOneAndUpdate(
       {
-        device_token,
-      },
-      {
-        user_id: currentUserId,
         device_id,
-        device_type,
       },
-      { upsert: true },
+      {
+        $set: {
+          user_id: currentUserId,
+          device_token,
+          device_id,
+          device_type,
+        },
+      },
+      { upsert: true, new: true },
     )
+    if (currentDocument == null) {
+      throw new OperationalError('Unable to register notification device', 500)
+    }
+
+    await UserDeviceModel.deleteMany({
+      _id: { $ne: currentDocument._id },
+      user_id: currentUserId,
+      device_id,
+    })
 
     Notification.subscribeToTopic(Notification.adminMainTopic, device_token)
 

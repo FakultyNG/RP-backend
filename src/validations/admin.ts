@@ -429,6 +429,13 @@ export const sendPushNotificationSchema = {
     body: STRING_SCHEMA.required(),
     type: STRING_SCHEMA,
     metadata: Joi.alternatives().try(Joi.string(), Joi.object()),
+    audience: STRING_SCHEMA.valid(
+      'all',
+      'new_services',
+      'upcoming_events',
+      'new_arrivals',
+      'live_channels',
+    ).default('all'),
   }),
 }
 

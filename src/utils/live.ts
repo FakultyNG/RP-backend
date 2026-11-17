@@ -53,13 +53,13 @@ export const handleRTMPStreamPublish = async (streamKey: unknown) => {
     },
   })
 
-  Notification.sendTopicPushNotification(Notification.makeContentTopic(liveId, 'LIVE'), {
+  await Notification.sendTopicPushNotification(Notification.makeContentTopic(liveId, 'LIVE'), {
     title: 'Update',
     type: 'LIVE_EVENT_REMINDER',
     body: `It's LIVE now: ${liveDocument.title} Tap to Join`,
     image,
     metadata: { liveId },
-  })
+  }, true)
 }
 
 export const handleRTMPStreamPublishDone = async (streamKey: unknown) => {

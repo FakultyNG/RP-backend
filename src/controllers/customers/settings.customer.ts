@@ -4,6 +4,19 @@ import { sendResponse } from '../../utils/responder'
 import { CustomerSettingsService } from '../../services/core/CustomerSettingsService'
 
 export class CustomerSettingsController {
+  static notificationPreferences = Catch.async(async ({ user, body }, res) => {
+    const data = await CustomerSettingsService.setNotificationPreferences(
+      GetDefined.loggedInUser(user),
+      body,
+    )
+
+    sendResponse({
+      res,
+      data,
+      message: 'notification preferences updated',
+    })
+  })
+
   static replaceInterests = Catch.async(async ({ user, body }, res) => {
     const data = await CustomerSettingsService.replaceInterests(
       GetDefined.loggedInUser(user),

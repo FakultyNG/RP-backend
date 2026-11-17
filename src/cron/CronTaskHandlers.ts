@@ -195,13 +195,13 @@ export class CronTaskHandlers {
       await Promise.all(liveDocuments.map(async liveDocument => {
         const liveId = liveDocument._id.toString()
         try {
-          Notification.sendTopicPushNotification(Notification.makeContentTopic(liveId, 'LIVE'), {
+          await Notification.sendTopicPushNotification(Notification.makeContentTopic(liveId, 'LIVE'), {
             title: 'Countdown',
             type: 'LIVE_EVENT_REMINDER',
             body: `1 hour to showtime! ${liveDocument.title} starts soon`,
             image: liveDocument.coverPhoto,
             metadata: { liveId },
-          })
+          }, true)
 
           await LiveModel.findByIdAndUpdate(liveId, {
             $set: {
@@ -235,13 +235,13 @@ export class CronTaskHandlers {
         try {
           const message = `Are you set? Tomorrow ${liveDocument.title} goes LIVE by ${formatTimeWithTimezone(liveDocument.start)} on Reeplay`
 
-          Notification.sendTopicPushNotification(Notification.makeContentTopic(liveId, 'LIVE'), {
+          await Notification.sendTopicPushNotification(Notification.makeContentTopic(liveId, 'LIVE'), {
             title: 'Countdown',
             type: 'LIVE_EVENT_REMINDER',
             body: message,
             image: liveDocument.coverPhoto,
             metadata: { liveId },
-          })
+          }, true)
 
           await LiveModel.findByIdAndUpdate(liveId, {
             $set: {
@@ -273,13 +273,13 @@ export class CronTaskHandlers {
         const liveId = liveDocument._id.toString()
 
         try {
-          Notification.sendTopicPushNotification(Notification.makeContentTopic(liveId, 'LIVE'), {
+          await Notification.sendTopicPushNotification(Notification.makeContentTopic(liveId, 'LIVE'), {
             title: 'Countdown',
             type: 'LIVE_EVENT_REMINDER',
             body: `${liveDocument.title} starts in 10 mins. Ready?`,
             image: liveDocument.coverPhoto,
             metadata: { liveId },
-          })
+          }, true)
 
           await LiveModel.findByIdAndUpdate(liveId, {
             $set: {

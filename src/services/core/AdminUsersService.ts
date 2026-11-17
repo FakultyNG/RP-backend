@@ -3,7 +3,11 @@ import { UserModel } from '../../models/users.model'
 import { UserRepo } from '../../repositories/UserRepo'
 import { OperationalError } from '../../utils/OperationalError'
 import { ExpressRequestQuery, QueryParamsFeatures } from '../../utils/QueryParamsFeatures'
-import { Notification, NotificationPayload } from '../../notifications/notification'
+import {
+  Notification,
+  NotificationAudience,
+  NotificationPayload,
+} from '../../notifications/notification'
 import { LoggedInUser, MulterFile } from '../../types'
 import { MediaManagement } from '../media-management'
 import env from '../../env'
@@ -12,13 +16,14 @@ import { NotificationService } from './NotificationService'
 export class AdminUsersService {
   static sendAdminMainTopicPushNotification = async (
     currentUser: LoggedInUser,
-    payload: Omit<NotificationPayload, 'image'>,
+    payload: Omit<NotificationPayload, 'image'> & { audience?: NotificationAudience },
     imageFile?: MulterFile,
   ) => {
     let image: string | undefined = undefined
     let photo: { Bucket: string; Key: string } | undefined
     const type = payload.type || 'MAIN_ADMIN_TOPIC_NOTIFICATION'
     const metadata = payload.metadata || { destination: 'notifications' }
+    const audience = payload.audience || 'all'
 
     if (imageFile) {
       const upload = await MediaManagement.storeImageAndSubtitle(
@@ -30,7 +35,7 @@ export class AdminUsersService {
       photo = { Bucket: upload.Bucket, Key: upload.Key }
     }
 
-    await Promise.all([
+    const [, delivery] = await Promise.all([
       NotificationService.createStoredAdminNotification({
         currentUser,
         title: payload.title,
@@ -39,17 +44,18 @@ export class AdminUsersService {
         metadata,
         photo,
       }),
-      Notification.sendTopicPushNotification(
-        Notification.adminMainTopic,
+      Notification.sendPreferencePushNotification(
+        audience,
         {
           ...payload,
           type,
           metadata,
           image,
         },
-        true,
       ),
     ])
+
+    return delivery
   }
 
   static fetchAll = async (query: ExpressRequestQuery) => {

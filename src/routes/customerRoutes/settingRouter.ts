@@ -1,11 +1,20 @@
 import { Router } from 'express'
 import { CustomerSettingsController } from '../../controllers/customers/settings.customer'
 import { requestValidator } from '../../middlewares/requestValidator'
-import { interestPreferencesSchema, videoQualitySchema } from '../../validations/customers'
+import {
+  interestPreferencesSchema,
+  notificationPreferencesSchema,
+  videoQualitySchema,
+} from '../../validations/customers'
 
 export const router = Router()
 
 router.put('/notification-vidquality', CustomerSettingsController.notificationSettings)
+router.patch(
+  '/notifications',
+  requestValidator(notificationPreferencesSchema),
+  CustomerSettingsController.notificationPreferences,
+)
 router.patch(
   '/video-quality',
   requestValidator(videoQualitySchema),

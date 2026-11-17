@@ -10,6 +10,7 @@ import { NotificationModel } from '../models/notifications.model'
 import { UserDeviceModel } from '../models/userDevice.model'
 import mongoose from 'mongoose'
 import { LIVE_CONTENT_SUB, VOD_CONTENT_SUB } from '../models/content.subscribers.model'
+import { SettingsModel } from '../models/userSettings.model'
 
 export interface NotificationPayload {
   title: string
@@ -17,6 +18,20 @@ export interface NotificationPayload {
   type: string
   metadata: Record<string, any>
   image?: string
+}
+
+export type NotificationAudience =
+  | 'all'
+  | 'new_services'
+  | 'upcoming_events'
+  | 'new_arrivals'
+  | 'live_channels'
+
+export type PushDeliveryResult = {
+  targetedDevices: number
+  sent: number
+  failed: number
+  removedInvalidTokens: number
 }
 
 type MakeUpcomingTopicPrefix = typeof VOD_CONTENT_SUB | typeof LIVE_CONTENT_SUB
@@ -142,6 +157,59 @@ export class Notification {
       await admin.messaging().send({ ...message, token })
     } catch (e) {
       console.log('sendTokenPushNotification error', e)
+    }
+  }
+
+  static getEligibleDeviceTokens = async (audience: NotificationAudience = 'all') => {
+    const settingsFilter: Record<string, unknown> = { allow_notifications: true }
+    if (audience !== 'all') settingsFilter[audience] = true
+    const userIds = await SettingsModel.distinct('user_id', settingsFilter)
+    if (userIds.length === 0) return []
+    return UserDeviceModel.distinct('device_token', { user_id: { $in: userIds } })
+  }
+
+  static sendPreferencePushNotification = async (
+    audience: NotificationAudience,
+    payload: NotificationPayload,
+  ): Promise<PushDeliveryResult> => {
+    const tokens = await this.getEligibleDeviceTokens(audience)
+    if (tokens.length === 0) {
+      return { targetedDevices: 0, sent: 0, failed: 0, removedInvalidTokens: 0 }
+    }
+
+    const invalidTokens: string[] = []
+    let sent = 0
+    let failed = 0
+    const message = this._makeBaseFirebaseMessage(payload)
+
+    for (let offset = 0; offset < tokens.length; offset += 500) {
+      const batchTokens = tokens.slice(offset, offset + 500)
+      const response = await admin.messaging().sendEachForMulticast({
+        ...message,
+        tokens: batchTokens,
+      })
+      sent += response.successCount
+      failed += response.failureCount
+      response.responses.forEach((item, index) => {
+        const code = item.error?.code
+        if (
+          code === 'messaging/registration-token-not-registered' ||
+          code === 'messaging/invalid-registration-token'
+        ) {
+          invalidTokens.push(batchTokens[index])
+        }
+      })
+    }
+
+    if (invalidTokens.length > 0) {
+      await UserDeviceModel.deleteMany({ device_token: { $in: invalidTokens } })
+    }
+
+    return {
+      targetedDevices: tokens.length,
+      sent,
+      failed,
+      removedInvalidTokens: invalidTokens.length,
     }
   }
 
