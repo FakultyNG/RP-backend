@@ -72,6 +72,8 @@ const schema = new Schema(
 )
 
 schema.index({ title: 1, brand: 1 }, { unique: true })
+schema.index({ expiry: 1 })
+schema.index({ active: 1, start: 1, expiry: 1, type: 1 })
 
 export const AdModel = model('ads', schema)
 export type AdSchema = InferSchemaType<typeof schema>

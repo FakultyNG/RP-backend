@@ -24,7 +24,7 @@ export class AdManagerRepo {
     return match
   }
 
-  protected static _pipeline = [
+  protected static _videoLookupPipeline = [
     {
       $lookup: {
         from: 'video_uploads',
@@ -34,14 +34,18 @@ export class AdManagerRepo {
         pipeline: [{ $match: { isTranscoded: true } }],
       },
     },
-    { $match: { 'videoUpload.0': { $exists: true } } },
     { $set: { videoUpload: { $first: '$videoUpload' } } },
+  ]
+
+  protected static _readyVideoPipeline = [
+    ...this._videoLookupPipeline,
+    { $match: { videoUpload: { $ne: null } } },
   ]
 
   static fetchMany = ({ skip, limit, type }: FetchManyInput) => {
     const res = AdModel.aggregate([
       this._typeMatch(type),
-      ...this._pipeline,
+      ...this._videoLookupPipeline,
       { $sort: { _id: -1 } },
       { $skip: skip },
       { $limit: limit },
@@ -63,7 +67,7 @@ export class AdManagerRepo {
         },
       },
       ...(hasSpecificType ? [] : [this._typeMatch(type)]),
-      ...this._pipeline,
+      ...this._readyVideoPipeline,
       // Preserve the random-on-each-request behaviour while returning enough
       // ads for clients to rotate continuously during the current session.
       { $sample: { size: 50 } },

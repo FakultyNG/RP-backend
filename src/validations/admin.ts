@@ -394,11 +394,11 @@ export const createClientSchema = {
 
 export const createAdSchema = Joi.object({
   title: STRING_SCHEMA.required(),
-  type: STRING_SCHEMA.valid('general', 'movie_ad', 'web', 'mobile').required(),
+  type: STRING_SCHEMA.valid('general', 'web', 'mobile').required(),
   brand: STRING_SCHEMA.required(),
-  link: STRING_SCHEMA.required(),
+  link: Joi.string().uri({ scheme: ['http', 'https'] }).required(),
   cta: STRING_SCHEMA.required(),
-  duration: Joi.number().required(),
+  duration: Joi.number().min(0).default(0),
   start: STRING_SCHEMA.isoDate().required(),
   expiry: STRING_SCHEMA.isoDate().required(),
   active: Joi.boolean().required(),
@@ -442,5 +442,22 @@ export const sendPushNotificationSchema = {
 export const createHomeAdSchema = Joi.object({
   title: STRING_SCHEMA.required(),
   link: Joi.string().uri({ scheme: ['http', 'https'] }).required(),
+  start: STRING_SCHEMA.isoDate().required(),
+  expiry: STRING_SCHEMA.isoDate().required(),
+  active: Joi.boolean().required(),
   imageFile: Joi.object().required(),
+})
+
+export const updateAdSchema = Joi.object({
+  title: STRING_SCHEMA.required(),
+  type: STRING_SCHEMA.valid('general', 'web', 'mobile', 'home_ad').required(),
+  brand: STRING_SCHEMA.required(),
+  link: Joi.string().uri({ scheme: ['http', 'https'] }).required(),
+  cta: STRING_SCHEMA.required(),
+  duration: Joi.number().min(0).default(0),
+  start: STRING_SCHEMA.isoDate().required(),
+  expiry: STRING_SCHEMA.isoDate().required(),
+  active: Joi.boolean().required(),
+  videoFile: Joi.object().optional(),
+  imageFile: Joi.object().optional(),
 })

@@ -19,6 +19,7 @@ import { Notification } from '../notifications/notification'
 import { formatTimeWithTimezone } from '../utils/date'
 import { LiveViewerPresenceModel } from '../models/liveViewerPresence.model'
 import { MediaConvert } from '../services/aws/mediaConvert'
+import { AdManagerService } from '../services/core/AdmanagerService'
 
 export class CronTaskHandlers {
   protected static checkTranscodedParentDocumentOrThrow = (
@@ -182,6 +183,14 @@ export class CronTaskHandlers {
       { $set: { expired: true, active: false, active_views: 0, endedAt: now } },
     )
     await LiveViewerPresenceModel.deleteMany({ updatedAt: { $lte: new Date(now.getTime() - 86400000) } })
+  }
+
+  static deleteExpiredAds = async () => {
+    try {
+      await AdManagerService.deleteExpiredAds()
+    } catch (error: any) {
+      console.error('Cron Error: delete expired ads', error.message ?? error)
+    }
   }
 
   static handleOneHourLiveEventPushReminder = async () => {

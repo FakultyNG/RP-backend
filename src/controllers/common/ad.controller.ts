@@ -8,7 +8,7 @@ import {
 import { OperationalError } from '../../utils/OperationalError'
 import { UploadMediaUtils } from '../../utils/UploadMediaUtils'
 import { validate } from '../../middlewares/requestValidator'
-import { createAdSchema, createHomeAdSchema } from '../../validations/admin'
+import { createAdSchema, createHomeAdSchema, updateAdSchema } from '../../validations/admin'
 import { GetDefined } from '../../utils/GetDefined'
 import { UserSchema } from '../../models/users.model'
 
@@ -21,6 +21,9 @@ export class AdsController {
     const data: CreateHomeAdData = {
       title: req.body.title,
       link: req.body.link,
+      start: req.body.start,
+      expiry: req.body.expiry,
+      active: req.body.active === 'true' || req.body.active === true,
       imageFile: req.file,
     }
     validate(createHomeAdSchema, data)
@@ -69,6 +72,26 @@ export class AdsController {
       message: `${ad.title} added`,
       data: ad,
     })
+  })
+
+  static update = Catch.async(async (req, res) => {
+    if (req.body.data == null || typeof req.body.data !== 'string') {
+      throw new OperationalError(
+        'formData.data is required and must be a JSON serialized string',
+        400,
+      )
+    }
+
+    const files = UploadMediaUtils.checkFiles(req.files)
+    const data = {
+      ...JSON.parse(req.body.data),
+      videoFile: files.video?.[0],
+      imageFile: files.image?.[0],
+    }
+    validate(updateAdSchema, data)
+    const ad = await AdManagerService.update(req.params.id, data)
+
+    sendResponse({ res, data: ad, message: `${ad.title} updated` })
   })
 
   static fetchMany = Catch.async(async ({ query, user }, res) => {
