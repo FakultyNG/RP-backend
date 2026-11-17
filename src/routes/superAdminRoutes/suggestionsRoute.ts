@@ -3,6 +3,7 @@ import { AdminSuggestionController } from '../../controllers/admins/suggestions.
 
 export const superAdminSuggestionsRouter = Router()
 
+superAdminSuggestionsRouter.get('/unread-count', AdminSuggestionController.unreadCount)
 superAdminSuggestionsRouter.get('/all', AdminSuggestionController.suggestionsAll)
 superAdminSuggestionsRouter.put('/markread/:id', AdminSuggestionController.suggestionRead)
 superAdminSuggestionsRouter.delete('/del/:id', AdminSuggestionController.suggestionDel)

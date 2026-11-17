@@ -17,6 +17,9 @@ interface FetchUserNotificationsParams {
 }
 
 export class NotificationRepo {
+  static countUnreadUserNotifications = (userId: MongoDBObjectId) =>
+    UserNotificationModel.countDocuments({ user: userId, hasSeen: false })
+
   static fetchUserNotifications = ({
     userId,
     skip,

@@ -42,6 +42,9 @@ interface CreateStoredAdminNotification extends CreateClientNotification {
 }
 
 export class NotificationService {
+  static getUnreadCount = (currentUser: LoggedInUser) =>
+    NotificationRepo.countUnreadUserNotifications(currentUser._id)
+
   static createStoredAdminNotification = async ({
     currentUser,
     title,

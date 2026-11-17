@@ -4,6 +4,8 @@ import { OperationalError } from '../../utils/OperationalError'
 import { ExpressRequestQuery, QueryParamsFeatures } from '../../utils/QueryParamsFeatures'
 
 export class SuggestionService {
+  static getUnreadCount = () => SuggestionModel.countDocuments({ seen: false })
+
   static getAdminSuggestions = async (query: ExpressRequestQuery) => {
     const { limit, skip } = QueryParamsFeatures.paginagteParams(query)
     const suggestions = await SuggestionRepo.adminAllSuggestions(skip, limit)

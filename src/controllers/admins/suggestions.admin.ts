@@ -3,6 +3,13 @@ import { Catch } from '../../utils/Catch'
 import { sendResponse } from '../../utils/responder'
 
 export class AdminSuggestionController {
+  static unreadCount = Catch.async(async (_, res) => {
+    sendResponse({
+      res,
+      data: { count: await SuggestionService.getUnreadCount() },
+    })
+  })
+
   static suggestionsAll = Catch.async(async ({ query }, res) => {
     sendResponse({
       res,

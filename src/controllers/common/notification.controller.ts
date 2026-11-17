@@ -4,6 +4,15 @@ import { GetDefined } from '../../utils/GetDefined'
 import { NotificationService } from '../../services/core/NotificationService'
 
 export class NotificationController {
+  static getUnreadCount = Catch.async(async (req, res) => {
+    sendResponse({
+      res,
+      data: {
+        count: await NotificationService.getUnreadCount(GetDefined.loggedInUser(req.user)),
+      },
+    })
+  })
+
   static createAdminNotification = Catch.async(async (req, res) => {
     await NotificationService.createAdminNotitication({
       currentUser: GetDefined.loggedInUser(req.user),
