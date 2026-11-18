@@ -2,7 +2,7 @@ import { Request } from 'express'
 import { CategoryEnumRepo } from '../../repositories/CategoryEnumRepo'
 import { OperationalError } from '../../utils/OperationalError'
 import { QueryParamsFeatures } from '../../utils/QueryParamsFeatures'
-import { CategoryEnumModel } from '../../models/categoryEnum.model'
+import { CategoryEnumModel, CategoryEnumSchema } from '../../models/categoryEnum.model'
 
 export class CategoryEnumService {
   static readonly PREMIUM_ADS_CATEGORY = 'Premium Ads'
@@ -86,7 +86,11 @@ export class CategoryEnumService {
     })
   }
 
-  static addCategory = async (name: string, position: number, location = 'Homepage') => {
+  static addCategory = async (
+    name: string,
+    position: number,
+    location: CategoryEnumSchema['location'] = 'Homepage',
+  ) => {
     const category = await CategoryEnumModel.create({
       name,
       position,
@@ -117,6 +121,9 @@ export class CategoryEnumService {
       category.position = data.position
     }
     if (typeof data.name === 'string') category.name = data.name
+    if (typeof data.location === 'string' && category.feedType !== 'personalized') {
+      category.location = data.location
+    }
     await category.save()
 
     return category
