@@ -263,11 +263,11 @@ export class AdminUploadController {
   })
 
   static checkVideoUploadTranscodedStatus = Catch.async(async ({ params }, res) => {
-    const isTranscoded = await AdminUploadService.checkIsTranscoded(params.id)
+    const uploadStatus = await AdminUploadService.checkIsTranscoded(params.id)
 
     sendResponse({
       res,
-      data: { isReady: isTranscoded },
+      data: uploadStatus,
     })
   })
 }

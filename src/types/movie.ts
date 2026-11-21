@@ -36,6 +36,7 @@ interface TrailerVideoUpload {
   resolutions: Resolution[]
   hlsKey?: string | null
   hlsStatus?: 'pending' | 'processing' | 'ready' | 'failed'
+  hlsError?: string | null
 }
 
 export interface Resolution {
@@ -68,8 +69,14 @@ export interface Episode {
   description: string
   trailerLink: null | string
   videoLink: null | string
-  videoUpload: null | Pick<TrailerVideoUpload, '_id' | 'resolutions'>
-  trailerUpload: null | Pick<TrailerVideoUpload, '_id' | 'resolutions'>
+  videoUpload: null | Pick<
+    TrailerVideoUpload,
+    '_id' | 'resolutions' | 'hlsKey' | 'hlsStatus' | 'hlsError'
+  >
+  trailerUpload: null | Pick<
+    TrailerVideoUpload,
+    '_id' | 'resolutions' | 'hlsKey' | 'hlsStatus' | 'hlsError'
+  >
   createdAt: string
   updatedAt: string
   averageRating: number

@@ -692,7 +692,11 @@ export class AdminUploadService {
       await CronTaskHandlers.updateVideoUploadDoc(videoUploadDocument)
     }
 
-    return videoUploadDocument.isTranscoded
+    return {
+      isReady: videoUploadDocument.isTranscoded,
+      status: videoUploadDocument.hlsStatus,
+      error: videoUploadDocument.hlsError,
+    }
   }
 }
 

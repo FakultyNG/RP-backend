@@ -340,6 +340,7 @@ export class VideoRepo {
                       resolutions: true,
                       hlsKey: true,
                       hlsStatus: true,
+                      hlsError: true,
                     },
                   },
                   {
@@ -898,6 +899,7 @@ export interface VideoUpload {
   resolutions: Resolution[]
   hlsKey?: string | null
   hlsStatus?: 'pending' | 'processing' | 'ready' | 'failed'
+  hlsError?: string | null
 }
 
 interface Resolution {

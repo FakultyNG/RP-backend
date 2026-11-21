@@ -37,6 +37,10 @@ export class MovieMediaSourcesUtils {
         trailer: this._getMovieVideoSource(episode, 'trailer', quality),
         videoUploadId: episode.videoUpload?._id,
         trailerUploadId: episode.trailerUpload?._id,
+        videoStatus: episode.videoUpload?.hlsStatus,
+        videoError: episode.videoUpload?.hlsError,
+        trailerStatus: episode.trailerUpload?.hlsStatus,
+        trailerError: episode.trailerUpload?.hlsError,
         trailerUpload: undefined,
         videoUpload: undefined,
         trailerLink: undefined,
@@ -57,6 +61,10 @@ export class MovieMediaSourcesUtils {
           ? this._getMovieVideoSource(videoDocument, 'vid', quality)
           : undefined,
         trailer: this._getMovieVideoSource(videoDocument, 'trailer', quality),
+        videoStatus: videoDocument.videoUpload?.hlsStatus,
+        videoError: videoDocument.videoUpload?.hlsError,
+        trailerStatus: videoDocument.trailerUpload?.hlsStatus,
+        trailerError: videoDocument.trailerUpload?.hlsError,
 
         //
         trailerUpload: undefined,
