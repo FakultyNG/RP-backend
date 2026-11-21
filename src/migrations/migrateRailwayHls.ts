@@ -3,6 +3,7 @@ import { VideoUpload, VideoUploadModel } from '../models/videoupload.model'
 import { MediaConvert } from '../services/aws/mediaConvert'
 import { S3 } from '../services/aws/s3'
 import { connectMongoDB } from '../utils/connectDB'
+import { CronTaskHandlers } from '../cron/CronTaskHandlers'
 
 type MigrationSummary = {
   total: number
@@ -11,6 +12,7 @@ type MigrationSummary = {
   processing: number
   failed: number
   legacyMp4Deleted: number
+  failures: Array<{ uploadId: string; parentType?: string; parentId?: string; reason: string }>
 }
 
 const expectedMasterKey = (document: VideoUpload) =>
@@ -36,6 +38,7 @@ const syncDocumentStatus = async (document: VideoUpload) => {
       hlsError: null,
       isTranscoded: true,
     })
+    await CronTaskHandlers.updateVideoUploadDoc(document)
     return 'ready' as const
   }
 
@@ -163,6 +166,7 @@ export const migrateRailwayHls = async ({
     processing: 0,
     failed: 0,
     legacyMp4Deleted: 0,
+    failures: [],
   }
 
   let query = VideoUploadModel.find({ key: { $exists: true, $ne: '' } }).sort({ size: 1, _id: 1 })
@@ -189,6 +193,15 @@ export const migrateRailwayHls = async ({
       summary.submitted += 1
     } else {
       summary.failed += 1
+    }
+
+    if ((!submitMissing || document.hlsStatus === 'failed') && document.hlsStatus !== 'processing') {
+      summary.failures.push({
+        uploadId: document._id.toString(),
+        parentType: document.parentType ?? undefined,
+        parentId: document.parentId?.toString(),
+        reason: document.hlsError ?? 'HLS master playlist is missing',
+      })
     }
   }
 

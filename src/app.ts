@@ -14,6 +14,7 @@ import { OperationalError } from './utils/OperationalError'
 import { S3 } from './services/aws/s3'
 import { MediaAccess } from './services/media-access'
 import { SharePageController } from './controllers/common/sharePage.controller'
+import { getBuildInfo } from './utils/buildInfo'
 
 const devTestRoute = (_: Request, res: Response) => {
   res.status(200).json({
@@ -40,7 +41,7 @@ export const reeplayApp = () => {
 
   app.get('/', devTestRoute)
   app.get('/health', (_, res) => {
-    res.status(200).json({ status: 'ok', service: 'reeplay-backend-typescript' })
+    res.status(200).json({ status: 'ok', ...getBuildInfo() })
   })
   app.get('/ready', (_, res) => {
     const ready = mongoose.connection.readyState === 1

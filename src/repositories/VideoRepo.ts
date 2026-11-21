@@ -419,18 +419,48 @@ export class VideoRepo {
     populateCasts = false,
     onlyReady = true,
   }: FetchVideosParams) => {
+    const readinessStages: PipelineStage[] = onlyReady
+      ? [
+          {
+            $lookup: {
+              from: 'seasons',
+              localField: '_id',
+              foreignField: 'video',
+              as: '_readySeasons',
+              pipeline: [{ $project: { _id: true } }],
+            },
+          },
+          {
+            $lookup: {
+              from: 'episodes',
+              localField: '_readySeasons._id',
+              foreignField: 'season',
+              as: '_readyEpisodes',
+              pipeline: [
+                { $match: { isVideoReady: true } },
+                { $limit: 1 },
+                { $project: { _id: true } },
+              ],
+            },
+          },
+          {
+            $match: {
+              $or: [
+                { type: { $ne: 'series' }, isVideoReady: true, isTrailerReady: true },
+                { type: 'series', '_readyEpisodes.0': { $exists: true } },
+              ],
+            },
+          },
+          { $unset: ['_readySeasons', '_readyEpisodes'] },
+        ]
+      : []
+
     const aggr = VideoModel.aggregate([
       ...(excludePreReleased ? [this._excludePreleasedVODSMatchStage] : []),
       ...(excludeExpired ? [this._excludeExpiredVODSMatchSage] : []),
       ...prevStages,
 
-      ...(onlyReady
-        ? [{
-          $match: {
-            $or: [{ type: 'series' }, { $and: [{ isVideoReady: true }, { isTrailerReady: true }] }],
-          },
-        } as PipelineStage.Match]
-        : []),
+      ...readinessStages,
 
       {
         $set: {

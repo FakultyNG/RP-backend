@@ -6,6 +6,20 @@ import { CategoryEnumModel, CategoryEnumSchema } from '../../models/categoryEnum
 
 export class CategoryEnumService {
   static readonly PREMIUM_ADS_CATEGORY = 'Premium Ads'
+  static readonly CATEGORY_LOCATIONS: CategoryEnumSchema['location'][] = [
+    'Homepage',
+    'Live/Channels',
+    'Live/Events',
+    'Live/Tv Shows',
+    'Live/Sports',
+    'Live/Podcast',
+  ]
+
+  private static isCategoryLocation = (
+    value: unknown,
+  ): value is CategoryEnumSchema['location'] =>
+    typeof value === 'string' &&
+    this.CATEGORY_LOCATIONS.includes(value as CategoryEnumSchema['location'])
   static readonly PREMIUM_ADS_POSITION = 11
   static readonly PERSONALIZED_CATEGORY = 'Because of your interests'
   static readonly PERSONALIZED_DEFAULT_POSITION = 3
@@ -121,7 +135,7 @@ export class CategoryEnumService {
       category.position = data.position
     }
     if (typeof data.name === 'string') category.name = data.name
-    if (typeof data.location === 'string' && category.feedType !== 'personalized') {
+    if (this.isCategoryLocation(data.location) && category.feedType !== 'personalized') {
       category.location = data.location
     }
     await category.save()

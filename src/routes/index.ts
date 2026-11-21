@@ -6,21 +6,16 @@ import { superAdminRouter } from './superAdminRoutes'
 import { webhooksRouter } from './webhooksRoutes'
 import { merchantRouter } from './merchantRoutes'
 import { LivestreamCntroller } from '../controllers/livestream/live.controller'
-import fs from 'node:fs'
-import path from 'node:path'
+import { getBuildInfo } from '../utils/buildInfo'
 
 export const v1Router = express.Router()
-
-const backendVersion = JSON.parse(
-  fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'),
-).version as string
 
 v1Router.get('/version', (_, res) => {
   res.setHeader('Cache-Control', 'no-store')
   res.status(200).json({
     status: 200,
     message: 'Backend version fetched',
-    data: { version: backendVersion },
+    data: getBuildInfo(),
   })
 })
 

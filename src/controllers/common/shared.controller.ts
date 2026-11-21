@@ -455,7 +455,7 @@ export class SharedController extends UploadMediaUtils {
 
         const videoUploadDocument = await VideoUploadRepo.findByParentId(videoDocument._id).where(
           'parentType',
-          'trailer',
+          'vod-trailer',
         )
 
         if (videoUploadDocument == null || videoUploadDocument.isTranscoded === false) {
