@@ -428,41 +428,47 @@ export class SharedController extends UploadMediaUtils {
           }
         }
 
-        if (videoDocument.videoLink) {
-          source = videoDocument.videoLink
-          break
-        }
-
         const vodUploadDocument = await VideoUploadRepo.findByParentId(videoDocument._id).where(
           'parentType',
           'vod',
         )
 
-        if (vodUploadDocument == null || vodUploadDocument.isTranscoded === false) {
-          throw new OperationalError('Not Found', 404)
-        }
-
-        source = req.query.download === 'true'
-          ? MediaAccess.getSignedVideoURL(vodUploadDocument.key)
-          : VidUploadUtils.getResSourceUrl(vodUploadDocument, quality)
-        break
-
-      case 'trailer':
-        if (videoDocument.trailerLink) {
-          source = videoDocument.trailerLink
+        if (vodUploadDocument?.isTranscoded) {
+          source = req.query.download === 'true'
+            ? MediaAccess.getSignedVideoURL(vodUploadDocument.key)
+            : VidUploadUtils.getResSourceUrl(vodUploadDocument, quality)
           break
         }
 
+        if (videoDocument.videoLink) {
+          source = videoDocument.videoLink
+          break
+        }
+
+        if (vodUploadDocument == null || vodUploadDocument.isTranscoded === false) {
+          throw new OperationalError('Not Found', 404)
+        }
+        break
+
+      case 'trailer':
         const videoUploadDocument = await VideoUploadRepo.findByParentId(videoDocument._id).where(
           'parentType',
           'vod-trailer',
         )
 
+        if (videoUploadDocument?.isTranscoded) {
+          source = VidUploadUtils.getResSourceUrl(videoUploadDocument, quality)
+          break
+        }
+
+        if (videoDocument.trailerLink) {
+          source = videoDocument.trailerLink
+          break
+        }
+
         if (videoUploadDocument == null || videoUploadDocument.isTranscoded === false) {
           throw new OperationalError('Not Found', 404)
         }
-
-        source = VidUploadUtils.getResSourceUrl(videoUploadDocument, quality)
         break
 
       default:

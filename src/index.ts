@@ -13,6 +13,7 @@ import { WithWorkerThread } from './utils/WithWorkerThread'
 import { dropLegacyCustomerPhoneIndex } from './migrations/dropLegacyCustomerPhoneIndex'
 import { reconcileViewAnalytics } from './migrations/reconcileViewAnalytics'
 import { repairNegativeWalletBalances } from './migrations/repairNegativeWalletBalances'
+import { migrateRailwayHls } from './migrations/migrateRailwayHls'
 
 const { PORT } = env
 
@@ -47,12 +48,24 @@ connectMongoDB().then(async conn => {
   // replace the previous healthy deployment as soon as the API is listening,
   // while idempotent repairs continue safely in the background.
   void (async () => {
-    try {
-      await dropLegacyCustomerPhoneIndex()
-      await repairNegativeWalletBalances()
-      await reconcileViewAnalytics({ ensureIndexes: true })
-    } catch (error) {
-      console.error('Startup maintenance failed; API remains available', error)
+    const runMaintenance = async (name: string, task: () => Promise<unknown>) => {
+      try {
+        return await task()
+      } catch (error) {
+        console.error(`Startup maintenance failed (${name}); API remains available`, error)
+        return undefined
+      }
+    }
+
+    await runMaintenance('legacy customer phone index', dropLegacyCustomerPhoneIndex)
+    await runMaintenance('negative wallet balances', repairNegativeWalletBalances)
+    await runMaintenance('view analytics', () => reconcileViewAnalytics({ ensureIndexes: true }))
+
+    if (process.env.RUN_RAILWAY_HLS_MIGRATION === 'true') {
+      const summary = await runMaintenance('Railway HLS migration', () => migrateRailwayHls())
+      if (summary) {
+        console.log('Railway HLS migration complete', JSON.stringify(summary))
+      }
     }
   })()
 })

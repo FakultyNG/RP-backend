@@ -9,15 +9,15 @@ export class MovieMediaSourcesUtils {
     quality: VideoQuality,
   ) => {
     if (routine === 'vid') {
-      return vid.videoLink ?? (vid.videoUpload
+      return (vid.videoUpload
         ? VidUploadUtils.getResSourceUrl(vid.videoUpload, quality)
-        : undefined)
+        : undefined) ?? vid.videoLink
     }
 
     if (routine === 'trailer') {
-      return vid.trailerLink ?? (vid.trailerUpload
+      return (vid.trailerUpload
         ? VidUploadUtils.getResSourceUrl(vid.trailerUpload, quality)
-        : undefined)
+        : undefined) ?? vid.trailerLink
     }
   }
 
