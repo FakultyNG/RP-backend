@@ -48,7 +48,7 @@ export class AdminManageSharedController extends SharedController {
   static addSubtitle = Catch.async(async (req, res) => {
     if (!req.file) {
       throw new OperationalError(
-        'No subtitle file was received. Select an SRT or VTT file and try again.',
+        'No subtitle file was received. Select a caption file and try again.',
         400,
       )
     }

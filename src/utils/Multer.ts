@@ -1,5 +1,4 @@
 import multer, { StorageEngine } from 'multer'
-import { extname } from 'node:path'
 
 import { Bytes } from './Bytes'
 import { OperationalError } from './OperationalError'
@@ -49,14 +48,6 @@ export class Multer {
     subtitleConfig: multer({
       storage: multer.memoryStorage(),
       limits: { fileSize: Bytes.mb(5) },
-      fileFilter: (_, file, cb) => {
-        const extension = extname(file.originalname).toLowerCase()
-        if (!['.srt', '.vtt'].includes(extension)) {
-          cb(new OperationalError('Only SRT or VTT subtitle files are allowed', 400))
-          return
-        }
-        cb(null, true)
-      },
     }),
     audioConfig: multer({
       storage: this._diskStorageConfig,
