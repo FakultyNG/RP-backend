@@ -432,7 +432,7 @@ export class SocialService {
   }
 
   static totalCommentsCount = async (vodId: string) => {
-    const totalComments = await CommentModel.find({ parentId: vodId }).countDocuments()
+    const totalComments = await CommentModel.countDocuments({ parentId: vodId })
     return { totalComments }
   }
 }

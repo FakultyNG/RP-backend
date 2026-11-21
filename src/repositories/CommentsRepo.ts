@@ -138,6 +138,12 @@ export class CommentsRepo {
   static _getRepliesRes = ({ match, skip, limit, userId }: GetCommentsAggeResInput) => {
     const res = CommentModel.aggregate([
       { $match: { ...match.$match, parentCommentId: { $exists: true } } },
+      // Page before joining users, parents and reactions. On popular content
+      // this reduces the expensive part of the pipeline from every reply to
+      // only the rows the device will actually render.
+      { $sort: { _id: -1 } },
+      { $skip: skip },
+      { $limit: limit },
 
       {
         $lookup: {
@@ -203,11 +209,14 @@ export class CommentsRepo {
           localField: '_id',
           foreignField: 'commentId',
           as: 'reactions',
-
           pipeline: [
             {
-              $project: {
-                isUserReaction: { $toBool: { $eq: ['$userId', userId] } },
+              $group: {
+                _id: null,
+                total: { $sum: 1 },
+                userReactionId: {
+                  $max: { $cond: [{ $eq: ['$userId', userId] }, '$_id', null] },
+                },
               },
             },
           ],
@@ -215,27 +224,13 @@ export class CommentsRepo {
       },
 
       {
-        $set: {
-          userReaction: {
-            $first: {
-              $filter: {
-                input: '$reactions',
-                cond: { $eq: ['$$this.isUserReaction', true] },
-                limit: 1,
-              },
-            },
-          },
-        },
-      },
-
-      {
         $project: {
           author: { $first: '$user' },
           parentCommentAuthor: { $first: '$parentComment.user' },
-          totalReactions: { $size: '$reactions' },
+          totalReactions: { $ifNull: [{ $first: '$reactions.total' }, 0] },
           parentCommentId: '$originalParentCommentId',
           reactionId: {
-            $ifNull: ['$userReaction._id', null],
+            $ifNull: [{ $first: '$reactions.userReactionId' }, null],
           },
 
           content: '$message',
@@ -243,10 +238,6 @@ export class CommentsRepo {
           updatedAt: true,
         },
       },
-
-      { $sort: { _id: -1 } },
-      { $skip: skip },
-      { $limit: limit },
     ])
 
     return res as Aggregate<GetRepliesResponse[]>
@@ -255,6 +246,9 @@ export class CommentsRepo {
   static _getCommentsRes = ({ match, skip, limit, userId }: GetCommentsAggeResInput) => {
     const res = CommentModel.aggregate([
       { $match: { ...match.$match, parentCommentId: { $exists: false } } },
+      { $sort: { _id: -1 } },
+      { $skip: skip },
+      { $limit: limit },
 
       {
         $lookup: {
@@ -274,7 +268,7 @@ export class CommentsRepo {
           localField: '_id',
           foreignField: 'parentCommentId',
           as: 'replies',
-          pipeline: [{ $project: { _id: true } }],
+          pipeline: [{ $count: 'total' }],
         },
       },
 
@@ -284,28 +278,17 @@ export class CommentsRepo {
           localField: '_id',
           foreignField: 'commentId',
           as: 'reactions',
-
           pipeline: [
             {
-              $project: {
-                isUserReaction: { $toBool: { $eq: ['$userId', userId] } },
+              $group: {
+                _id: null,
+                total: { $sum: 1 },
+                userReactionId: {
+                  $max: { $cond: [{ $eq: ['$userId', userId] }, '$_id', null] },
+                },
               },
             },
           ],
-        },
-      },
-
-      {
-        $set: {
-          userReaction: {
-            $first: {
-              $filter: {
-                input: '$reactions',
-                cond: { $eq: ['$$this.isUserReaction', true] },
-                limit: 1,
-              },
-            },
-          },
         },
       },
 
@@ -314,19 +297,15 @@ export class CommentsRepo {
           author: { $first: '$user' },
 
           reactionId: {
-            $ifNull: ['$userReaction._id', null],
+            $ifNull: [{ $first: '$reactions.userReactionId' }, null],
           },
-
-          totalReactions: { $size: '$reactions' },
-          totalReplies: { $size: '$replies' },
+          totalReactions: { $ifNull: [{ $first: '$reactions.total' }, 0] },
+          totalReplies: { $ifNull: [{ $first: '$replies.total' }, 0] },
           content: '$message',
           createdAt: true,
           updatedAt: true,
         },
       },
-      { $sort: { _id: -1 } },
-      { $skip: skip },
-      { $limit: limit },
     ])
 
     return res as Aggregate<GetCommentsResponse[]>

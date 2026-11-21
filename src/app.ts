@@ -31,6 +31,10 @@ export const reeplayApp = () => {
   app.use(express.json({ limit: '10gb' }))
   app.use(express.urlencoded({ extended: true }))
   app.use(cors())
+  // Catalogue, home and comment payloads are JSON-heavy. Compression was
+  // imported but never enabled, so every mobile request paid the full transfer
+  // cost on cellular networks.
+  app.use(compression({ threshold: 1024 }))
 
   app.use(
     '/static/images',
@@ -51,6 +55,22 @@ export const reeplayApp = () => {
     })
   })
   app.get('/share/:type/:id', Catch.async(SharePageController.render))
+  app.get('/.well-known/assetlinks.json', (_, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=3600')
+    res.json([
+      {
+        relation: ['delegate_permission/common.handle_all_urls'],
+        target: {
+          namespace: 'android_app',
+          package_name: 'com.reeplayv2',
+          sha256_cert_fingerprints: [
+            '68:26:D6:4A:0C:6E:4C:64:34:34:7F:13:FD:24:14:AD:36:35:0B:F0:09:09:DA:54:3D:4D:C0:C6:F3:E0:C3:96',
+            'FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C',
+          ],
+        },
+      },
+    ])
+  })
   app.get(
     '/media/images/*',
     Catch.async(async (req, res) => {
