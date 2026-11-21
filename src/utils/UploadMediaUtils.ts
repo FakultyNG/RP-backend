@@ -177,13 +177,22 @@ export class UploadMediaUtils {
     data.video && this.allowMimetype(data.video, 'video', 'video must be a video file')
   }
 
-  static getVideoUploadDocument = (upload: StoreResponse) => {
+  static getVideoUploadDocument = (
+    upload: StoreResponse & {
+      hlsStatus?: 'pending' | 'processing' | 'ready' | 'failed'
+      hlsJobId?: string | null
+      hlsKey?: string | null
+    },
+  ) => {
     const videoUploadDocument = new VideoUploadModel({
       bucket: upload.Bucket,
       key: upload.Key,
       mimetype: upload.mimetype,
       size: upload.size,
       isTranscoded: false,
+      hlsStatus: upload.hlsStatus ?? 'pending',
+      hlsJobId: upload.hlsJobId ?? null,
+      hlsKey: upload.hlsKey ?? null,
     })
 
     return videoUploadDocument
