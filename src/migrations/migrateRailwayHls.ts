@@ -4,6 +4,11 @@ import { MediaConvert } from '../services/aws/mediaConvert'
 import { S3 } from '../services/aws/s3'
 import { connectMongoDB } from '../utils/connectDB'
 import { CronTaskHandlers } from '../cron/CronTaskHandlers'
+import { VideoModel } from '../models/videos.model'
+import { EpisodeModel } from '../models/episodes.model'
+import { SeasonModel } from '../models/seasons.model'
+import { LiveModel } from '../models/lives.model'
+import { AdModel } from '../models/admanager.model'
 
 type MigrationSummary = {
   total: number
@@ -17,6 +22,35 @@ type MigrationSummary = {
 
 const expectedMasterKey = (document: VideoUpload) =>
   document.hlsKey || MediaConvert.getHlsMasterKey(document.key)
+
+const markParentUnavailable = async (document: VideoUpload) => {
+  switch (document.parentType) {
+    case 'vod':
+      await VideoModel.findByIdAndUpdate(document.parentId, { isVideoReady: false })
+      break
+    case 'vod-trailer':
+    case 'trailer' as VideoUpload['parentType']:
+      await VideoModel.findByIdAndUpdate(document.parentId, { isTrailerReady: false })
+      break
+    case 'episode':
+      await EpisodeModel.findByIdAndUpdate(document.parentId, { isVideoReady: false })
+      break
+    case 'episode-trailer':
+      await EpisodeModel.findByIdAndUpdate(document.parentId, { isTrailerReady: false })
+      break
+    case 'season-trailer':
+      await SeasonModel.findByIdAndUpdate(document.parentId, { isTrailerReady: false })
+      break
+    case 'live':
+      await LiveModel.findByIdAndUpdate(document.parentId, { isPreviewVideoReady: false })
+      break
+    case 'ad':
+      await AdModel.findByIdAndUpdate(document.parentId, { isVideoReady: false })
+      break
+    default:
+      break
+  }
+}
 
 const updateHlsFields = async (
   document: VideoUpload,
@@ -94,6 +128,7 @@ const submitDocument = async (document: VideoUpload) => {
       hlsStatus: 'failed',
       hlsError: error?.message ?? 'Unable to submit Railway HLS job',
     })
+    await markParentUnavailable(document)
     return false
   }
 }
