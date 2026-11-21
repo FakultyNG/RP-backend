@@ -33,6 +33,7 @@ import { UploadMediaUtils } from '../../utils/UploadMediaUtils'
 import { VideoUploadModel } from '../../models/videoupload.model'
 import { CronTaskHandlers } from '../../cron/CronTaskHandlers'
 import { ContentLifecycleNotificationService } from './ContentLifecycleNotificationService'
+import { MediaConvert } from '../aws/mediaConvert'
 
 export class AdminUploadService {
   static resolveWithMediaSources = (queryParams: QueryParamsFeaturesOptions['queryParams']) =>
@@ -664,12 +665,25 @@ export class AdminUploadService {
     }
 
     const aggrgatedVideoDocuments = await VideoRepo.adminFetchByType(queryParams)
-    return MovieMediaSourcesUtils.resolveMediaSources(aggrgatedVideoDocuments, '720p')
+    const videos = MovieMediaSourcesUtils.resolveMediaSources(
+      aggrgatedVideoDocuments,
+      '720p',
+    ) as unknown as Array<Record<string, any>>
+
+    return await Promise.all(
+      videos.map(async video => ({
+        ...video,
+        processing: await this.getContentProcessingStatus(video._id.toString(), false),
+      })),
+    )
   }
 
-  static getSeasonsAndEpisodes = async (vidSeriesId: string, queryParams: any) => {
+  static getSeasonsAndEpisodes = async (
+    vidSeriesId: string,
+    queryParams: any,
+    includeProcessing = false,
+  ) => {
     const { page, limit } = QueryParamsFeatures.paginagteParams(queryParams)
-    const includeProcessing = this.resolveWithMediaSources(queryParams)
 
     const seasonsWithMediaSources = MovieMediaSourcesUtils.resolveSeasonsMediaSources(
       await VideoRepo.fetchSeasonsAndEpisodes(vidSeriesId, page, limit, includeProcessing),
@@ -696,6 +710,135 @@ export class AdminUploadService {
       isReady: videoUploadDocument.isTranscoded,
       status: videoUploadDocument.hlsStatus,
       error: videoUploadDocument.hlsError,
+    }
+  }
+
+  static getContentProcessingStatus = async (videoId: string, live = true) => {
+    const video = await VideoModel.findById(videoId).select(
+      'title type active releaseDate expiryDate isVideoReady isTrailerReady videoUpload trailerUpload videoLink trailerLink',
+    )
+    if (video == null) throw new OperationalError('Content not found', 404)
+
+    const buildUploadStatus = async (
+      uploadId: unknown,
+      ready: boolean,
+      kind: 'main' | 'trailer',
+      label: string,
+    ) => {
+      if (!uploadId) {
+        return {
+          id: null,
+          kind,
+          label,
+          status: ready ? 'ready' as const : 'missing' as const,
+          progress: ready ? 100 : 0,
+          error: null,
+        }
+      }
+
+      const upload = await VideoUploadModel.findById(uploadId)
+      if (upload == null) {
+        return { id: String(uploadId), kind, label, status: 'missing' as const, progress: 0, error: 'Upload record not found' }
+      }
+
+      if (live && !upload.isTranscoded && upload.hlsStatus !== 'failed') {
+        await CronTaskHandlers.updateVideoUploadDoc(upload)
+      }
+
+      let progress: number | null = upload.isTranscoded || upload.hlsStatus === 'ready' ? 100 : 0
+      let providerStatus: string | null = null
+      if (live && !upload.isTranscoded && upload.hlsJobId && upload.hlsStatus !== 'failed') {
+        try {
+          const job = await MediaConvert.getJob(upload.hlsJobId)
+          providerStatus = job?.Status ?? null
+          progress = job?.JobPercentComplete ?? null
+        } catch (error: any) {
+          // Progress is diagnostic information. A transient AWS status failure
+          // must not hide the persisted processing state from the admin.
+          providerStatus = null
+        }
+      }
+
+      return {
+        id: upload._id.toString(),
+        kind,
+        label,
+        status: upload.isTranscoded ? 'ready' as const : upload.hlsStatus,
+        progress,
+        providerStatus,
+        error: upload.hlsError ?? null,
+        updatedAt: upload.updatedAt,
+      }
+    }
+
+    let items: Awaited<ReturnType<typeof buildUploadStatus>>[] = []
+    if (video.type === 'series') {
+      const seasons = await SeasonModel.find({ video: video._id }).select('_id serial_number')
+      const seasonNumbers = new Map(seasons.map(season => [season._id.toString(), season.serial_number]))
+      const episodes = await EpisodeModel.find({ season: { $in: seasons.map(season => season._id) } })
+        .select('season episodeNumber title isVideoReady isTrailerReady videoUpload trailerUpload')
+        .sort({ season: 1, episodeNumber: 1 })
+
+      const episodeItems = await Promise.all(
+        episodes.flatMap(episode => {
+          const prefix = `S${seasonNumbers.get(episode.season.toString()) ?? '?'} E${episode.episodeNumber}`
+          const statuses = [
+            buildUploadStatus(episode.videoUpload, Boolean(episode.isVideoReady), 'main', `${prefix} · ${episode.title}`),
+          ]
+          if (episode.trailerUpload || episode.isTrailerReady) {
+            statuses.push(
+              buildUploadStatus(episode.trailerUpload, Boolean(episode.isTrailerReady), 'trailer', `${prefix} trailer`),
+            )
+          }
+          return statuses
+        }),
+      )
+      items = episodeItems
+    } else {
+      items = await Promise.all([
+        buildUploadStatus(video.videoUpload, Boolean(video.isVideoReady), 'main', 'Main content'),
+        buildUploadStatus(video.trailerUpload, Boolean(video.isTrailerReady), 'trailer', 'Trailer'),
+      ])
+    }
+
+    const mainItems = items.filter(item => item.kind === 'main')
+    const hasProcessing = items.some(item => item.status === 'pending' || item.status === 'processing')
+    const hasFailure = items.some(item => item.status === 'failed' || item.status === 'missing')
+    const mediaReady = video.type === 'series'
+      ? mainItems.some(item => item.status === 'ready')
+      : mainItems.every(item => item.status === 'ready') &&
+        items.filter(item => item.kind === 'trailer').every(item => item.status === 'ready')
+    const now = new Date()
+    const released = !video.releaseDate || video.releaseDate <= now
+    const unexpired = !video.expiryDate || video.expiryDate > now
+    const published = Boolean(video.active && released && unexpired && mediaReady)
+    const state = hasProcessing
+      ? 'processing'
+      : hasFailure
+        ? 'failed'
+        : mediaReady
+          ? 'ready'
+          : 'draft'
+
+    return {
+      contentId: video._id.toString(),
+      title: video.title,
+      type: video.type,
+      state,
+      mediaReady,
+      published,
+      publicationReason: published
+        ? 'Published in the app'
+        : !mediaReady
+          ? 'Waiting for required media'
+          : !video.active
+            ? 'Content is inactive'
+            : !released
+              ? 'Scheduled for release'
+              : !unexpired
+                ? 'Content has expired'
+                : 'Not published',
+      items,
     }
   }
 }

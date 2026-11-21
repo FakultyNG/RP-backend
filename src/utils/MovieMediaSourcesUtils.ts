@@ -61,6 +61,8 @@ export class MovieMediaSourcesUtils {
           ? this._getMovieVideoSource(videoDocument, 'vid', quality)
           : undefined,
         trailer: this._getMovieVideoSource(videoDocument, 'trailer', quality),
+        videoUploadId: videoDocument.videoUpload?._id,
+        trailerUploadId: videoDocument.trailerUpload?._id,
         videoStatus: videoDocument.videoUpload?.hlsStatus,
         videoError: videoDocument.videoUpload?.hlsError,
         trailerStatus: videoDocument.trailerUpload?.hlsStatus,

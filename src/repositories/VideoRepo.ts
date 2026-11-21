@@ -484,10 +484,12 @@ export class VideoRepo {
           pipeline: [
             {
               $project: {
+                _id: true,
                 parentType: true,
                 resolutions: true,
                 hlsKey: true,
                 hlsStatus: true,
+                hlsError: true,
               },
             },
             {
@@ -896,6 +898,7 @@ export interface VodCardResponse {
 }
 
 export interface VideoUpload {
+  _id: string
   resolutions: Resolution[]
   hlsKey?: string | null
   hlsStatus?: 'pending' | 'processing' | 'ready' | 'failed'

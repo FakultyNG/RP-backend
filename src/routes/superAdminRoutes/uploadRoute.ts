@@ -5,6 +5,7 @@ import { Multer } from '../../utils/Multer'
 export const superAdminUploadsRouter = Router()
 
 superAdminUploadsRouter.get('/fetch/:type', AdminUploadController.fetchVideos)
+superAdminUploadsRouter.get('/status/:id', AdminUploadController.fetchProcessingStatus)
 superAdminUploadsRouter.get('/seasons/fetch/:vidId', AdminUploadController.fetchSeasonsAndEpisodes)
 
 superAdminUploadsRouter.post(

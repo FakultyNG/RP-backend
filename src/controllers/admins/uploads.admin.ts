@@ -216,8 +216,12 @@ export class AdminUploadController {
 
   static fetchSeasonsAndEpisodes = Catch.async(async ({ query, params, user }, res) => {
     const currentUser = GetDefined.loggedInUser(user)
-    const seasons = await AdminUploadService.getSeasonsAndEpisodes(params.vidId, query)
     const isAdmin = currentUser.role === 'admin' || currentUser.role === 'superadmin'
+    const seasons = await AdminUploadService.getSeasonsAndEpisodes(
+      params.vidId,
+      query,
+      isAdmin,
+    )
 
     if (!isAdmin) {
       const video = await VideoModel.findById(params.vidId).select('vidClass')
@@ -248,6 +252,16 @@ export class AdminUploadController {
       res,
       message: `seasons fetched successfully`,
       data: seasons,
+    })
+  })
+
+  static fetchProcessingStatus = Catch.async(async ({ query, params }, res) => {
+    sendResponse({
+      res,
+      data: await AdminUploadService.getContentProcessingStatus(
+        params.id,
+        query.live !== 'false',
+      ),
     })
   })
 
