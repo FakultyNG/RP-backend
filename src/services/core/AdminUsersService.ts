@@ -12,6 +12,7 @@ import { LoggedInUser, MulterFile } from '../../types'
 import { MediaManagement } from '../media-management'
 import env from '../../env'
 import { NotificationService } from './NotificationService'
+import { AdminNotificationCenterService } from './AdminNotificationCenterService'
 
 export class AdminUsersService {
   static sendAdminMainTopicPushNotification = async (
@@ -35,7 +36,7 @@ export class AdminUsersService {
       photo = { Bucket: upload.Bucket, Key: upload.Key }
     }
 
-    const [, delivery] = await Promise.all([
+    const [storedNotification, delivery] = await Promise.all([
       NotificationService.createStoredAdminNotification({
         currentUser,
         title: payload.title,
@@ -54,6 +55,15 @@ export class AdminUsersService {
         },
       ),
     ])
+
+    await AdminNotificationCenterService.publish({
+      eventKey: `broadcast:${storedNotification._id}`,
+      title: payload.title,
+      description: payload.body,
+      category: audience === 'all' ? 'new_services' : audience,
+      route: '',
+      metadata: { ...metadata, audience },
+    })
 
     return delivery
   }
