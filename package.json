@@ -8,6 +8,7 @@
   },
   "scripts": {
     "test": "jest",
+    "test:live-contract": "npm run build && node scripts/verify-live-contract.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
     "prest": "nodemon --exec \"npm run format && node\" src/index.js",

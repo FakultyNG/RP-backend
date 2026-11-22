@@ -47,6 +47,11 @@ const schema = new Schema(
       required: true,
     },
 
+    channelLogo: {
+      type: PhotoSchema,
+      default: null,
+    },
+
     previewVideoUpload: {
       type: Schema.Types.ObjectId,
       ref: 'video_uploads',

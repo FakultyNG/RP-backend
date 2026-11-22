@@ -247,6 +247,7 @@ export class SharedController extends UploadMediaUtils {
       liveId: req.params.liveId,
       coverPhotoFile: files.coverPhoto?.[0],
       previewVideoFile: files.previewVideo?.[0],
+      channelLogoFile: files.channelLogo?.[0],
     })
 
     sendResponse({
@@ -285,9 +286,17 @@ export class SharedController extends UploadMediaUtils {
         ...parsedData,
         previewVideo: files.previewVideo?.[0],
         coverPhoto: files.coverPhoto?.[0],
+        channelLogo: files.channelLogo?.[0],
         clientId: isAdmin ? parsedData.clientId : GetDefined.loggedInUser(req.user).id,
         creatorType: isAdmin ? 'admin' : 'client',
       }
+
+      data.coverPhoto &&
+        UploadMediaUtils.allowMimetype(data.coverPhoto, 'image', 'coverPhoto must be an image')
+      data.channelLogo &&
+        UploadMediaUtils.allowMimetype(data.channelLogo, 'image', 'channelLogo must be an image')
+      data.previewVideo &&
+        UploadMediaUtils.allowMimetype(data.previewVideo, 'video', 'previewVideo must be a video')
 
       validate(addLiveSchema, data)
 

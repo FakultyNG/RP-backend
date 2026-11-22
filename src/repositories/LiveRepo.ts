@@ -448,7 +448,13 @@ export class LiveRepo {
 
       {
         $set: {
-          channelLogo: '$clientDetails.photo',
+          channelLogo: {
+            $cond: [
+              { $ne: ['$channelLogo.Key', null] },
+              { $concat: [env.CDN_IMAGES_BASE_URL, '/', '$channelLogo.Key'] },
+              '$clientDetails.photo',
+            ],
+          },
         },
       },
 

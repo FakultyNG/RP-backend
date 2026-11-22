@@ -34,6 +34,7 @@ export type CreateLiveData = {
   upcoming?: boolean
   coverPhoto: Express.Multer.File
   previewVideo?: Express.Multer.File
+  channelLogo?: Express.Multer.File
   sponsored?: boolean
   popular?: boolean
   creatorType: 'admin' | 'client'
@@ -54,6 +55,7 @@ type DeleteLiveInput = {
 type EditLiveInput = {
   previewVideoFile?: Express.Multer.File
   coverPhotoFile?: Express.Multer.File
+  channelLogoFile?: Express.Multer.File
   liveId: string
 }
 
@@ -306,23 +308,24 @@ export class LiveStreamService {
     await withMongoDBSession(this._deleteLiveSession, input)
   }
 
-  private static _checkLiveOngoinStreams = async (data: CreateLiveData) => {
+  private static _checkLiveScheduleOverlap = async (data: CreateLiveData) => {
     const liveDocument = await LiveModel.exists({
       client_id: data.clientId,
-      expiry: { $gt: new Date() },
+      start: { $lt: new Date(data.expiry) },
+      expiry: { $gt: new Date(data.start) },
       expired: false,
     }).select('_id')
 
     if (liveDocument) {
-      throw new OperationalError('The client already has a live event that has not expired', 403)
+      throw new OperationalError('The client already has a live event during this time', 409)
     }
   }
 
   protected static _editLiveMedia = async (
-    { previewVideoFile, coverPhotoFile, liveId }: EditLiveInput,
+    { previewVideoFile, coverPhotoFile, channelLogoFile, liveId }: EditLiveInput,
     session: MaybeSession,
   ) => {
-    if (previewVideoFile == null && coverPhotoFile == null) {
+    if (previewVideoFile == null && coverPhotoFile == null && channelLogoFile == null) {
       throw new OperationalError('upload at least one file', 400)
     }
 
@@ -346,6 +349,24 @@ export class LiveStreamService {
       liveDocument.coverPhoto = {
         Key: photoUpload.Key,
         Bucket: photoUpload.Bucket,
+      }
+    }
+
+    if (channelLogoFile) {
+      UploadMediaUtils.allowMimetype(channelLogoFile, 'image', 'channelLogo must be an image')
+      const logoUpload = await MediaManagement.storeImageAndSubtitle(
+        channelLogoFile,
+        liveDocument.expiry,
+        'generic',
+      )
+
+      if (liveDocument.channelLogo) {
+        MediaManagement.deleteObject(liveDocument.channelLogo.Key, liveDocument.channelLogo.Bucket)
+      }
+
+      liveDocument.channelLogo = {
+        Key: logoUpload.Key,
+        Bucket: logoUpload.Bucket,
       }
     }
 
@@ -399,7 +420,7 @@ export class LiveStreamService {
       throw new OperationalError('expiry must be later than start', 400)
     }
 
-    await this._checkLiveOngoinStreams(data)
+    await this._checkLiveScheduleOverlap(data)
 
     const liveDocument = new LiveModel({
       client_id: data.clientId,
@@ -422,37 +443,63 @@ export class LiveStreamService {
       currency: data.currency,
     })
 
-    if (data.coverPhoto) {
-      const photoUpload = await MediaManagement.storeImageAndSubtitle(
-        data.coverPhoto,
-        liveDocument.expiry,
-        'landscape-poster',
-      )
+    const uploadedObjects: Array<{ Key: string; Bucket: string }> = []
 
-      liveDocument.coverPhoto = {
-        Key: photoUpload.Key,
-        Bucket: photoUpload.Bucket,
+    try {
+
+      if (data.coverPhoto) {
+        const photoUpload = await MediaManagement.storeImageAndSubtitle(
+          data.coverPhoto,
+          liveDocument.expiry,
+          'landscape-poster',
+        )
+        uploadedObjects.push(photoUpload)
+
+        liveDocument.coverPhoto = {
+          Key: photoUpload.Key,
+          Bucket: photoUpload.Bucket,
+        }
       }
-    }
 
-    if (data.previewVideo) {
-      const vidUpload = await MediaManagement.uploadAndInitiateMediaConvert(
-        data.previewVideo,
-        liveDocument.expiry,
+      if (data.channelLogo) {
+        const logoUpload = await MediaManagement.storeImageAndSubtitle(
+          data.channelLogo,
+          liveDocument.expiry,
+          'generic',
+        )
+        uploadedObjects.push(logoUpload)
+
+        liveDocument.channelLogo = {
+          Key: logoUpload.Key,
+          Bucket: logoUpload.Bucket,
+        }
+      }
+
+      if (data.previewVideo) {
+        const vidUpload = await MediaManagement.uploadAndInitiateMediaConvert(
+          data.previewVideo,
+          liveDocument.expiry,
+        )
+        uploadedObjects.push(vidUpload)
+
+        const videoUploadDocument = UploadMediaUtils.getVideoUploadDocument(vidUpload)
+        videoUploadDocument.parentId = liveDocument._id
+        videoUploadDocument.parentType = 'live'
+        liveDocument.previewVideoUpload = videoUploadDocument._id
+        liveDocument.isPreviewVideoReady = false
+        await videoUploadDocument.save({ session })
+      }
+
+      await liveDocument.save({ session })
+
+      return {
+        liveId: liveDocument._id.toString(),
+      }
+    } catch (error) {
+      await Promise.all(
+        uploadedObjects.map(upload => MediaManagement.deleteObject(upload.Key, upload.Bucket)),
       )
-
-      const videoUploadDocument = UploadMediaUtils.getVideoUploadDocument(vidUpload)
-      videoUploadDocument.parentId = liveDocument._id
-      videoUploadDocument.parentType = 'live'
-      liveDocument.previewVideoUpload = videoUploadDocument._id
-      liveDocument.isPreviewVideoReady = false
-      await videoUploadDocument.save({ session })
-    }
-
-    await liveDocument.save({ session })
-
-    return {
-      liveId: liveDocument._id.toString(),
+      throw error
     }
   }
 
@@ -470,6 +517,8 @@ export class LiveStreamService {
         audience: 'upcoming_events',
         metadata: { contentId: live._id.toString(), contentType: 'live' },
         photo: live.coverPhoto,
+      }).catch(error => {
+        console.error('Live created, but the upcoming notification could not be published', error)
       })
     }
     return result
