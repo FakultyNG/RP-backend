@@ -25,6 +25,11 @@ export const analyticsEventTypes = [
   'notification_open',
   'house_ad_impression',
   'house_ad_click',
+  'house_ad_video_start',
+  'house_ad_video_25',
+  'house_ad_video_50',
+  'house_ad_video_75',
+  'house_ad_video_complete',
 ] as const
 
 export const analyticsPlatforms = ['android', 'ios', 'web', 'unknown'] as const
@@ -63,7 +68,7 @@ const analyticsEventSchema = new Schema(
   { timestamps: true },
 )
 
-analyticsEventSchema.index({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 })
+analyticsEventSchema.index({ createdAt: 1 }, { expireAfterSeconds: 400 * 24 * 60 * 60 })
 analyticsEventSchema.index({ contentId: 1, contentType: 1, occurredAt: -1 })
 
 const dailyAnalyticsSchema = new Schema(

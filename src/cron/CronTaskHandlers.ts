@@ -19,6 +19,7 @@ import { formatTimeWithTimezone } from '../utils/date'
 import { LiveViewerPresenceModel } from '../models/liveViewerPresence.model'
 import { MediaConvert } from '../services/aws/mediaConvert'
 import { AdManagerService } from '../services/core/AdmanagerService'
+import { CampaignReportService } from '../services/core/CampaignReportService'
 import { ContentLifecycleNotificationService } from '../services/core/ContentLifecycleNotificationService'
 
 export class CronTaskHandlers {
@@ -219,6 +220,14 @@ export class CronTaskHandlers {
       await AdManagerService.deleteExpiredAds()
     } catch (error: any) {
       console.error('Cron Error: delete expired ads', error.message ?? error)
+    }
+  }
+
+  static sendDueCampaignReports = async () => {
+    try {
+      await CampaignReportService.processDueReports()
+    } catch (error: any) {
+      console.error('Cron Error: campaign reports', error.message ?? error)
     }
   }
 

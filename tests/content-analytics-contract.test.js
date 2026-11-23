@@ -71,5 +71,12 @@ describe('content analytics ingestion contract', () => {
         events: [{ ...adEvent, adId: undefined }],
       }).error,
     ).toBeDefined()
+
+    expect(
+      anonymousContentAnalyticsSchema.body.validate({
+        installId: 'install-12345678901234567890',
+        events: [{ ...adEvent, eventId: 'welcome-ad-25', eventType: 'house_ad_video_25' }],
+      }).error,
+    ).toBeUndefined()
   })
 })

@@ -65,6 +65,39 @@ const schema = new Schema(
       type: Boolean,
       default: true,
     },
+
+    advertiserEmails: {
+      type: [String],
+      default: [],
+    },
+
+    reportDelivery: {
+      type: String,
+      enum: ['none', 'live_link', 'csv'],
+      default: 'none',
+      index: true,
+    },
+
+    reportFrequency: {
+      type: String,
+      enum: ['daily', 'weekly', 'monthly'],
+      default: 'weekly',
+    },
+
+    reportTimezone: {
+      type: String,
+      default: 'Africa/Lagos',
+    },
+
+    reportTokenVersion: {
+      type: Number,
+      default: 1,
+      min: 1,
+    },
+
+    nextReportAt: Date,
+    lastReportAt: Date,
+    archivedAt: Date,
   },
   {
     timestamps: true,
@@ -74,6 +107,7 @@ const schema = new Schema(
 schema.index({ title: 1, brand: 1 }, { unique: true })
 schema.index({ expiry: 1 })
 schema.index({ active: 1, start: 1, expiry: 1, type: 1 })
+schema.index({ reportDelivery: 1, nextReportAt: 1 })
 
 export const AdModel = model('ads', schema)
 export type AdSchema = InferSchemaType<typeof schema>

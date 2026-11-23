@@ -11,8 +11,15 @@ import { validate } from '../../middlewares/requestValidator'
 import { createAdSchema, createHomeAdSchema, updateAdSchema } from '../../validations/admin'
 import { GetDefined } from '../../utils/GetDefined'
 import { UserSchema } from '../../models/users.model'
+import { CampaignReportService } from '../../services/core/CampaignReportService'
 
 export class AdsController {
+  static publicReport = Catch.async(async (req, res) => {
+    const html = await CampaignReportService.publicHtml(req.params.token)
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.type('html').send(html)
+  })
+
   static createHomeAd = Catch.async(async (req, res) => {
     if (!req.file) {
       throw new OperationalError('One horizontal poster is required', 400)
@@ -135,5 +142,37 @@ export class AdsController {
       res,
       message: 'ad deleted',
     })
+  })
+
+  static analytics = Catch.async(async (req, res) => {
+    const data = await CampaignReportService.analytics(req.params.id, {
+      days: Number(req.query.days) || 30,
+    })
+    sendResponse({ res, data, message: 'Campaign analytics fetched' })
+  })
+
+  static exportCsv = Catch.async(async (req, res) => {
+    const { report, csv } = await CampaignReportService.csv(req.params.id, {
+      days: Number(req.query.days) || 30,
+    })
+    const filename = `${report.campaign.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-analytics.csv`
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.send(csv)
+  })
+
+  static sendReport = Catch.async(async (req, res) => {
+    const data = await CampaignReportService.sendReport(req.params.id)
+    sendResponse({ res, data, message: 'Campaign report delivery completed' })
+  })
+
+  static regenerateReportLink = Catch.async(async (req, res) => {
+    const reportLink = await CampaignReportService.regenerateLink(req.params.id)
+    sendResponse({ res, data: { reportLink }, message: 'Campaign report link regenerated' })
+  })
+
+  static reportDeliveries = Catch.async(async (req, res) => {
+    const data = await CampaignReportService.deliveries(req.params.id)
+    sendResponse({ res, data, message: 'Campaign report delivery history fetched' })
   })
 }

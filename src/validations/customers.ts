@@ -133,7 +133,8 @@ const analyticsEventSchema = Joi.object({
     'playback_error', 'complete', 'search', 'download_start', 'download_complete',
     'download_error', 'cast_start', 'cast_complete', 'cast_error', 'share',
     'notification_received', 'notification_open', 'house_ad_impression',
-    'house_ad_click',
+    'house_ad_click', 'house_ad_video_start', 'house_ad_video_25',
+    'house_ad_video_50', 'house_ad_video_75', 'house_ad_video_complete',
   ).required(),
   positionSeconds: Joi.number().min(0).max(24 * 60 * 60),
   durationSeconds: Joi.number().min(0).max(24 * 60 * 60),
@@ -144,7 +145,11 @@ const analyticsEventSchema = Joi.object({
   sourceScreen: STRING_SCHEMA.max(80),
   searchTerm: STRING_SCHEMA.max(100),
   adId: MONGO_DB_OBJECT_ID_SCHEMA.when('eventType', {
-    is: Joi.valid('house_ad_impression', 'house_ad_click'),
+    is: Joi.valid(
+      'house_ad_impression', 'house_ad_click', 'house_ad_video_start',
+      'house_ad_video_25', 'house_ad_video_50', 'house_ad_video_75',
+      'house_ad_video_complete',
+    ),
     then: Joi.required(),
   }),
   notificationId: STRING_SCHEMA.max(100),

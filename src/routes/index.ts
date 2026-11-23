@@ -7,6 +7,7 @@ import { webhooksRouter } from './webhooksRoutes'
 import { merchantRouter } from './merchantRoutes'
 import { LivestreamCntroller } from '../controllers/livestream/live.controller'
 import { getBuildInfo } from '../utils/buildInfo'
+import { AdsController } from '../controllers/common/ad.controller'
 
 export const v1Router = express.Router()
 
@@ -21,6 +22,7 @@ v1Router.get('/version', (_, res) => {
 
 v1Router.post('/on_publish', LivestreamCntroller.handleRTMPLivestreamOnPublish)
 v1Router.post('/on_publish_done', LivestreamCntroller.handleRTMPLivestreamOnPublishDone)
+v1Router.get('/ads/report/:token', AdsController.publicReport)
 
 v1Router.use('/webhooks', webhooksRouter)
 v1Router.use('/customers', customerRouter)

@@ -5,6 +5,45 @@ import env from '../env'
 import { capitalize } from './strGen'
 import { UserDocument } from '../models/users.model'
 
+export interface TransactionalEmailInput {
+  to: string | string[]
+  subject: string
+  html: string
+  text?: string
+  attachments?: Array<{
+    filename: string
+    content: Buffer | string
+    contentType?: string
+  }>
+}
+
+const createTransport = () => nodemailer.createTransport({
+  host: env.MAIL_HOST,
+  port: env.MAIL_PORT,
+  secure: env.MAIL_PORT === 465,
+  auth: {
+    user: env.MAIL_USER,
+    pass: env.MAIL_PASSWORD,
+  },
+})
+
+export const sendTransactionalEmail = async ({
+  to,
+  subject,
+  html,
+  text,
+  attachments,
+}: TransactionalEmailInput) => {
+  await createTransport().sendMail({
+    from: { name: env.MAIL_SENDER, address: env.MAIL_USER },
+    to,
+    subject,
+    html,
+    text: text ?? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+    attachments,
+  })
+}
+
 interface RecipientData {
   firstName: string
   lastName: string
@@ -46,26 +85,7 @@ export class Email {
   async sendMsg({ subject, ...params }: SendMessageInput) {
     const html = await this.makeHtml(params)
 
-    const transport = nodemailer.createTransport({
-      host: env.MAIL_HOST,
-      port: env.MAIL_PORT,
-      secure: env.MAIL_PORT === 465,
-      auth: {
-        user: env.MAIL_USER,
-        pass: env.MAIL_PASSWORD,
-      },
-    })
-
-    await transport.sendMail({
-      from: {
-        name: env.MAIL_SENDER,
-        address: env.MAIL_USER,
-      },
-      to: this.email,
-      subject,
-      html,
-      text: html,
-    })
+    await sendTransactionalEmail({ to: this.email, subject, html, text: html })
   }
 
   async sendVerifyEmail(pin: string) {

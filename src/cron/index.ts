@@ -6,6 +6,7 @@ export class CronTasks {
     schedule('*/10 * * * *', CronTaskHandlers.expireFeaturedContents),
     schedule('* * * * *', CronTaskHandlers.expireLiveEvents),
     schedule('* * * * *', CronTaskHandlers.deleteExpiredAds),
+    schedule('*/15 * * * *', CronTaskHandlers.sendDueCampaignReports),
     schedule('* * * * *', CronTaskHandlers.updateVidUploadsResolutions),
     schedule('0 * * * *', CronTaskHandlers.handle24HourLiveEventPushReminder),
     schedule('0 * * * *', CronTaskHandlers.handleOneHourLiveEventPushReminder),

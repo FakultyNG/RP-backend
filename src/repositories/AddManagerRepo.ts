@@ -1,4 +1,4 @@
-import { Aggregate, PipelineStage } from 'mongoose'
+import { Aggregate, PipelineStage, Types } from 'mongoose'
 import { AdModel, AdSchema } from '../models/admanager.model'
 import { VideoUploadSchema } from '../models/videoupload.model'
 
@@ -9,6 +9,7 @@ interface FetchManyInput {
 }
 
 export interface FetchAdResult extends Omit<AdSchema, 'videoUpload'> {
+  _id: Types.ObjectId
   videoUpload?: VideoUploadSchema
 }
 

@@ -10,6 +10,7 @@ import { VideoQuality, VidUploadUtils } from '../../utils/VideoUploadUtils'
 import { MediaAccess } from '../media-access'
 import { UploadMediaUtils } from '../../utils/UploadMediaUtils'
 import { CategoryEnumService } from './CategoryEnumsService'
+import { CampaignReportService } from './CampaignReportService'
 
 export interface CreateAdData
   extends Omit<AdSchema, 'createdAt' | 'updatedAt' | 'video' | 'photo'> {
@@ -36,6 +37,10 @@ export interface UpdateAdData {
   start: string
   expiry: string
   active: boolean
+  advertiserEmails: string[]
+  reportDelivery: 'none' | 'live_link' | 'csv'
+  reportFrequency: 'daily' | 'weekly' | 'monthly'
+  reportTimezone: string
   videoFile?: MulterFile
   imageFile?: MulterFile
 }
@@ -47,7 +52,11 @@ interface UploadMediaInput {
 }
 
 export class AdManagerService {
-  protected static _resolveMediaSources = (ads: FetchAdResult[], quality?: VideoQuality) => {
+  protected static _resolveMediaSources = (
+    ads: FetchAdResult[],
+    quality?: VideoQuality,
+    includeReporting = false,
+  ) => {
     return ads.map(ad => {
       const photoUrl = MediaAccess.getImageAndSubtitleURL(ad.photo.Key)
       const hasVideo = Boolean(ad.videoUpload)
@@ -55,7 +64,7 @@ export class AdManagerService {
         ? VidUploadUtils.getResSourceUrl(ad.videoUpload, quality ?? '720p')
         : undefined
 
-      return Object.assign(ad, {
+      const resolved = Object.assign(ad, {
         photoUrl,
         videoUrl,
         hasVideo,
@@ -63,6 +72,22 @@ export class AdManagerService {
         photo: undefined,
         __v: undefined,
         isVideoReady: undefined,
+      })
+      if (includeReporting) {
+        return Object.assign(resolved, {
+          reportLink: ad.reportDelivery === 'live_link'
+            ? CampaignReportService.reportLink(ad._id.toString(), ad.reportTokenVersion)
+            : undefined,
+        })
+      }
+      return Object.assign(resolved, {
+        advertiserEmails: undefined,
+        reportDelivery: undefined,
+        reportFrequency: undefined,
+        reportTimezone: undefined,
+        reportTokenVersion: undefined,
+        nextReportAt: undefined,
+        lastReportAt: undefined,
       })
     })
   }
@@ -167,6 +192,10 @@ export class AdManagerService {
       type,
       title,
       cta,
+      advertiserEmails,
+      reportDelivery,
+      reportFrequency,
+      reportTimezone,
     }: CreateAdData,
     session: MaybeSession,
   ) => {
@@ -187,6 +216,14 @@ export class AdManagerService {
       duration,
       cta,
       active,
+      advertiserEmails: [...new Set((advertiserEmails ?? []).map(email => email.trim().toLowerCase()))],
+      reportDelivery: reportDelivery ?? 'none',
+      reportFrequency: reportFrequency ?? 'weekly',
+      reportTimezone: reportTimezone ?? 'Africa/Lagos',
+      nextReportAt: CampaignReportService.nextReportAt(
+        startAt,
+        reportDelivery !== undefined && reportDelivery !== 'none' && advertiserEmails?.length > 0,
+      ),
       expiry: expireAt,
       start: startAt,
       photo: {
@@ -211,6 +248,10 @@ export class AdManagerService {
     }
 
     const { startAt, expireAt } = this._schedule(data.start, data.expiry)
+    const advertiserEmails = [...new Set((data.advertiserEmails ?? []).map(email => email.trim().toLowerCase()))]
+    const reportDelivery = data.reportDelivery ?? 'none'
+    const reportFrequency = data.reportFrequency ?? 'weekly'
+    const reportTimezone = data.reportTimezone ?? 'Africa/Lagos'
     const previousPhoto = ad.photo
     const previousVideoUpload = ad.videoUpload
     let replacementPhoto = ad.photo
@@ -254,6 +295,15 @@ export class AdManagerService {
       photo: replacementPhoto,
       videoUpload: replacementVideoUpload,
       isVideoReady: data.videoFile ? false : ad.isVideoReady,
+      advertiserEmails,
+      reportDelivery,
+      reportFrequency,
+      reportTimezone,
+      nextReportAt: CampaignReportService.nextReportAt(
+        startAt,
+        reportDelivery !== 'none' && advertiserEmails.length > 0,
+      ),
+      archivedAt: undefined,
     })
     await ad.save()
 
@@ -278,7 +328,7 @@ export class AdManagerService {
       type: query.type,
     })
 
-    return this._resolveMediaSources(ads, videoQuality)
+    return this._resolveMediaSources(ads, videoQuality, true)
   }
 
   static getRandom = async (videoQuality: VideoQuality, type: unknown) => {
@@ -295,14 +345,12 @@ export class AdManagerService {
   }
 
   static deleteExpiredAds = async () => {
-    const expiredAds = await AdModel.find({ expiry: { $lte: new Date() } })
-    await Promise.allSettled(
-      expiredAds.map(async ad => {
-        const deleted = await AdModel.findOneAndDelete({ _id: ad._id, expiry: { $lte: new Date() } })
-        if (deleted) await this._deleteMedia(deleted)
-      }),
+    const now = new Date()
+    const archived = await AdModel.updateMany(
+      { expiry: { $lte: now }, archivedAt: { $exists: false } },
+      { $set: { archivedAt: now, active: false }, $unset: { nextReportAt: 1 } },
     )
-    return expiredAds.length
+    return archived.modifiedCount
   }
 
   static deleteAd = async (addId: string) => {

@@ -448,6 +448,10 @@ export const createAdSchema = Joi.object({
   start: STRING_SCHEMA.isoDate().required(),
   expiry: STRING_SCHEMA.isoDate().required(),
   active: Joi.boolean().required(),
+  advertiserEmails: Joi.array().items(Joi.string().email()).max(10).default([]),
+  reportDelivery: STRING_SCHEMA.valid('none', 'live_link', 'csv').default('none'),
+  reportFrequency: STRING_SCHEMA.valid('daily', 'weekly', 'monthly').default('weekly'),
+  reportTimezone: STRING_SCHEMA.max(80).default('Africa/Lagos'),
   videoFile: Joi.object().required(),
   imageFile: Joi.object().required(),
 })
@@ -504,6 +508,10 @@ export const updateAdSchema = Joi.object({
   start: STRING_SCHEMA.isoDate().required(),
   expiry: STRING_SCHEMA.isoDate().required(),
   active: Joi.boolean().required(),
+  advertiserEmails: Joi.array().items(Joi.string().email()).max(10).default([]),
+  reportDelivery: STRING_SCHEMA.valid('none', 'live_link', 'csv').default('none'),
+  reportFrequency: STRING_SCHEMA.valid('daily', 'weekly', 'monthly').default('weekly'),
+  reportTimezone: STRING_SCHEMA.max(80).default('Africa/Lagos'),
   videoFile: Joi.object().optional(),
   imageFile: Joi.object().optional(),
 })
