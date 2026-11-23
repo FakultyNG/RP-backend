@@ -109,19 +109,66 @@ export const viewContentSchema = {
 const analyticsEventSchema = Joi.object({
   eventId: STRING_SCHEMA.max(120).required(),
   sessionId: STRING_SCHEMA.max(120).required(),
-  contentId: MONGO_DB_OBJECT_ID_SCHEMA.required(),
-  contentType: STRING_SCHEMA.valid('vod', 'episode', 'live').required(),
-  eventType: STRING_SCHEMA.valid('play_start', 'progress', 'complete', 'share').required(),
+  contentId: MONGO_DB_OBJECT_ID_SCHEMA.when('eventType', {
+    is: Joi.valid(
+      'content_impression', 'content_select', 'preview_start', 'play_start',
+      'playback_ready', 'progress', 'buffer', 'playback_error', 'complete',
+      'download_start', 'download_complete', 'download_error', 'cast_start',
+      'cast_complete', 'cast_error', 'share',
+    ),
+    then: Joi.required(),
+  }),
+  contentType: STRING_SCHEMA.valid('vod', 'episode', 'live').when('eventType', {
+    is: Joi.valid(
+      'content_impression', 'content_select', 'preview_start', 'play_start',
+      'playback_ready', 'progress', 'buffer', 'playback_error', 'complete',
+      'download_start', 'download_complete', 'download_error', 'cast_start',
+      'cast_complete', 'cast_error', 'share',
+    ),
+    then: Joi.required(),
+  }),
+  eventType: STRING_SCHEMA.valid(
+    'app_session_start', 'screen_view', 'content_impression', 'content_select',
+    'preview_start', 'play_start', 'playback_ready', 'progress', 'buffer',
+    'playback_error', 'complete', 'search', 'download_start', 'download_complete',
+    'download_error', 'cast_start', 'cast_complete', 'cast_error', 'share',
+    'notification_received', 'notification_open', 'house_ad_impression',
+    'house_ad_click',
+  ).required(),
   positionSeconds: Joi.number().min(0).max(24 * 60 * 60),
   durationSeconds: Joi.number().min(0).max(24 * 60 * 60),
   watchedSeconds: Joi.number().min(0).max(60),
   completionPercent: Joi.number().min(0).max(100),
   shareDestination: STRING_SCHEMA.max(40),
+  screenName: STRING_SCHEMA.max(80),
+  sourceScreen: STRING_SCHEMA.max(80),
+  searchTerm: STRING_SCHEMA.max(100),
+  adId: MONGO_DB_OBJECT_ID_SCHEMA.when('eventType', {
+    is: Joi.valid('house_ad_impression', 'house_ad_click'),
+    then: Joi.required(),
+  }),
+  notificationId: STRING_SCHEMA.max(100),
+  appVersion: STRING_SCHEMA.max(30),
+  platform: STRING_SCHEMA.valid('android', 'ios', 'web', 'unknown'),
+  osVersion: STRING_SCHEMA.max(40),
+  deviceClass: STRING_SCHEMA.valid('phone', 'tablet', 'tv', 'web', 'unknown'),
+  networkType: STRING_SCHEMA.max(30),
+  quality: STRING_SCHEMA.max(20),
+  errorCode: STRING_SCHEMA.max(80),
+  startupMs: Joi.number().min(0).max(300_000),
+  bufferingSeconds: Joi.number().min(0).max(300),
   occurredAt: Joi.date().iso(),
-})
+}).with('contentId', 'contentType').with('contentType', 'contentId')
 
 export const contentAnalyticsSchema = {
   body: Joi.object({
+    events: Joi.array().items(analyticsEventSchema).min(1).max(50).required(),
+  }),
+}
+
+export const anonymousContentAnalyticsSchema = {
+  body: Joi.object({
+    installId: STRING_SCHEMA.min(20).max(120).required(),
     events: Joi.array().items(analyticsEventSchema).min(1).max(50).required(),
   }),
 }

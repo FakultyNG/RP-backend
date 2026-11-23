@@ -1,5 +1,5 @@
 import mongoose from 'mongoose'
-import { ContentAnalyticsDailyModel, ContentAnalyticsEventModel, ContentAnalyticsViewerDayModel } from '../models/contentAnalytics.model'
+import { AnalyticsActiveViewerDayModel, AnalyticsIdentityModel, ContentAnalyticsDailyModel, ContentAnalyticsEventModel, ContentAnalyticsViewerDayModel } from '../models/contentAnalytics.model'
 import { EpisodeModel } from '../models/episodes.model'
 import { LiveViewerPresenceModel } from '../models/liveViewerPresence.model'
 import { LiveModel } from '../models/lives.model'
@@ -218,6 +218,8 @@ export const reconcileViewAnalytics = async (options: { ensureIndexes?: boolean 
       ContentAnalyticsEventModel.createIndexes(),
       ContentAnalyticsDailyModel.createIndexes(),
       ContentAnalyticsViewerDayModel.createIndexes(),
+      AnalyticsIdentityModel.createIndexes(),
+      AnalyticsActiveViewerDayModel.createIndexes(),
     ])
   } else {
     console.log('Skipped analytics index reconciliation; automatic production indexes are disabled')

@@ -8,6 +8,7 @@ superAdminDashboardRouter.get('/profile/fetch', AdminDashboardController.current
 superAdminDashboardRouter.put('/profile/edit', AdminDashboardController.editAdminProfile)
 superAdminDashboardRouter.get('/topvideosbytype', AdminDashboardController.fetchVideosByType)
 superAdminDashboardRouter.get('/analytics', AdminAnalyticsController.overview)
+superAdminDashboardRouter.get('/analytics/report', AdminAnalyticsController.report)
 
 superAdminDashboardRouter.get(
   '/fetchbalanceandusers',
