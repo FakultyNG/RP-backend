@@ -12,7 +12,7 @@ const schema = new Schema(
     position: {
       type: Number,
       required: true,
-      unique: true,
+      min: 1,
     },
 
     location: {
@@ -35,12 +35,22 @@ const schema = new Schema(
       default: 'standard',
       index: true,
     },
+
+    active: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
   },
 
   {
     timestamps: true,
   },
 )
+
+// Positions describe ordering within a placement. Homepage position 1 and
+// Live/Channels position 1 are therefore both valid.
+schema.index({ location: 1, position: 1 }, { unique: true })
 
 export const CategoryEnumModel = model('category_enums', schema)
 export type CategoryEnumSchema = InferSchemaType<typeof schema>

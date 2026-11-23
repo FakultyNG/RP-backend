@@ -14,6 +14,7 @@ import { dropLegacyCustomerPhoneIndex } from './migrations/dropLegacyCustomerPho
 import { reconcileViewAnalytics } from './migrations/reconcileViewAnalytics'
 import { repairNegativeWalletBalances } from './migrations/repairNegativeWalletBalances'
 import { migrateRailwayHls } from './migrations/migrateRailwayHls'
+import { repairCategoryPositionIndex } from './migrations/repairCategoryPositionIndex'
 
 const { PORT } = env
 
@@ -58,6 +59,7 @@ connectMongoDB().then(async conn => {
     }
 
     await runMaintenance('legacy customer phone index', dropLegacyCustomerPhoneIndex)
+    await runMaintenance('category placement position index', repairCategoryPositionIndex)
     await runMaintenance('negative wallet balances', repairNegativeWalletBalances)
     await runMaintenance('view analytics', () => reconcileViewAnalytics({ ensureIndexes: true }))
 

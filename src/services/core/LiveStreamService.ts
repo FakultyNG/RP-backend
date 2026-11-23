@@ -18,6 +18,7 @@ import { CommentModel } from '../../models/comments.model'
 import { QueryParamsFeatures, ExpressRequestQuery } from '../../utils/QueryParamsFeatures'
 import { ViewService } from './ViewService'
 import { LiveViewerPresenceModel } from '../../models/liveViewerPresence.model'
+import { CategoryEnumModel } from '../../models/categoryEnum.model'
 
 export type CreateLiveData = {
   clientId: string
@@ -81,6 +82,30 @@ type HandleNewmemberInput = {
 }
 
 export class LiveStreamService {
+  private static readonly LIVE_CATEGORY_LOCATIONS: Record<string, string> = {
+    channel: 'Live/Channels',
+    event: 'Live/Events',
+    tvshow: 'Live/Tv Shows',
+    sport: 'Live/Sports',
+    podcast: 'Live/Podcast',
+  }
+
+  private static validateLiveCategories = async (type: string, categoryIds: string[]) => {
+    const expectedLocation = this.LIVE_CATEGORY_LOCATIONS[type]
+    const categories = await CategoryEnumModel.find({
+      _id: { $in: categoryIds },
+      location: expectedLocation,
+      active: { $ne: false },
+    }).select('_id')
+
+    if (!expectedLocation || categories.length !== new Set(categoryIds).size) {
+      throw new OperationalError(
+        `Select active categories assigned to ${expectedLocation ?? 'this live content type'}`,
+        400,
+      )
+    }
+  }
+
   static handleSocketComment = async (
     { message, liveId, userDocument }: HandleSocketNewComment,
     session?: ClientSession,
@@ -419,6 +444,8 @@ export class LiveStreamService {
     if (expiry <= start) {
       throw new OperationalError('expiry must be later than start', 400)
     }
+
+    await this.validateLiveCategories(data.type, data.category ?? [])
 
     await this._checkLiveScheduleOverlap(data)
 

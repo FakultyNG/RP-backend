@@ -40,7 +40,10 @@ export class CategoryEnumService {
     const position = topTen
       ? topTen.position + 1
       : this.PERSONALIZED_DEFAULT_POSITION
-    const categoriesToShift = await CategoryEnumModel.find({ position: { $gte: position } })
+    const categoriesToShift = await CategoryEnumModel.find({
+      location: 'Homepage',
+      position: { $gte: position },
+    })
       .sort({ position: -1 })
     for (const category of categoriesToShift) {
       category.position += 1
@@ -50,6 +53,7 @@ export class CategoryEnumService {
     return await CategoryEnumModel.create({
       name: this.PERSONALIZED_CATEGORY,
       position,
+      location: 'Homepage',
       feedType: 'personalized',
     })
   }
@@ -64,6 +68,7 @@ export class CategoryEnumService {
     }
 
     const occupant = await CategoryEnumModel.findOne({
+      location: 'Homepage',
       position: this.PREMIUM_ADS_POSITION,
       ...(existing ? { _id: { $ne: existing._id } } : {}),
     })
@@ -86,6 +91,7 @@ export class CategoryEnumService {
 
     if (occupant) {
       const categories = await CategoryEnumModel.find({
+        location: 'Homepage',
         position: { $gte: this.PREMIUM_ADS_POSITION },
       }).sort({ position: -1 })
       for (const category of categories) {
@@ -97,6 +103,7 @@ export class CategoryEnumService {
     return await CategoryEnumModel.create({
       name: this.PREMIUM_ADS_CATEGORY,
       position: this.PREMIUM_ADS_POSITION,
+      location: 'Homepage',
     })
   }
 
@@ -105,6 +112,15 @@ export class CategoryEnumService {
     position: number,
     location: CategoryEnumSchema['location'] = 'Homepage',
   ) => {
+    if (!this.isCategoryLocation(location)) {
+      throw new OperationalError('category location is invalid', 400)
+    }
+
+    const positionTaken = await CategoryEnumModel.exists({ location, position })
+    if (positionTaken) {
+      throw new OperationalError(`position ${position} is already used in ${location}`, 409)
+    }
+
     const category = await CategoryEnumModel.create({
       name,
       position,
@@ -120,11 +136,29 @@ export class CategoryEnumService {
       throw new OperationalError('category id is invalid', 404)
     }
 
-    if (typeof data.position === 'number' && data.position !== category.position) {
+    const targetLocation = this.isCategoryLocation(data.location)
+      ? data.location
+      : category.location
+    const locationChanged = targetLocation !== category.location
+
+    if (
+      (typeof data.position === 'number' && data.position !== category.position) ||
+      locationChanged
+    ) {
+      const targetPosition = typeof data.position === 'number' ? data.position : category.position
       const occupant = await CategoryEnumModel.findOne({
-        position: data.position,
+        location: targetLocation,
+        position: targetPosition,
         _id: { $ne: category._id },
       })
+
+      if (occupant && locationChanged) {
+        throw new OperationalError(
+          `position ${targetPosition} is already used in ${targetLocation}`,
+          409,
+        )
+      }
+
       const oldPosition = category.position
       category.position = -Math.abs(Date.now())
       await category.save()
@@ -132,11 +166,14 @@ export class CategoryEnumService {
         occupant.position = oldPosition
         await occupant.save()
       }
-      category.position = data.position
+      category.position = targetPosition
     }
     if (typeof data.name === 'string') category.name = data.name
     if (this.isCategoryLocation(data.location) && category.feedType !== 'personalized') {
       category.location = data.location
+    }
+    if (typeof data.active === 'boolean' && category.feedType !== 'personalized') {
+      category.active = data.active
     }
     await category.save()
 
@@ -146,7 +183,15 @@ export class CategoryEnumService {
   static getCategories = async (query: Request['query']) => {
     await this.ensurePersonalizedCategory()
     await this.ensurePremiumAdsCategory()
-    const features = new QueryParamsFeatures(CategoryEnumRepo.getAllCategories(), {
+    const filter: Record<string, unknown> = {}
+    if (typeof query.location === 'string' && this.isCategoryLocation(query.location)) {
+      filter.location = query.location
+    } else if (query.scope === 'live') {
+      filter.location = { $regex: '^Live/' }
+    }
+    if (query.active === 'true') filter.active = { $ne: false }
+
+    const features = new QueryParamsFeatures(CategoryEnumRepo.getAllCategories(filter), {
       defaultLimit: 300,
       defaultPage: 1,
       queryParams: query,

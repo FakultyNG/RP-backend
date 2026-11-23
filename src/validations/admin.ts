@@ -370,7 +370,7 @@ export const editCastSchema = {
 export const addCategorySchema = {
   body: Joi.object({
     name: STRING_SCHEMA.required(),
-    position: Joi.number().required(),
+    position: Joi.number().integer().min(1).required(),
     location: STRING_SCHEMA.valid(
       'Homepage',
       'Live/Channels',
@@ -379,13 +379,14 @@ export const addCategorySchema = {
       'Live/Sports',
       'Live/Podcast',
     ),
+    active: Joi.boolean(),
   }),
 }
 
 export const updateCategorySchema = {
   body: Joi.object({
     name: STRING_SCHEMA,
-    position: Joi.number(),
+    position: Joi.number().integer().min(1),
     location: STRING_SCHEMA.valid(
       'Homepage',
       'Live/Channels',
@@ -394,7 +395,8 @@ export const updateCategorySchema = {
       'Live/Sports',
       'Live/Podcast',
     ),
-  }).or('name', 'position', 'location'),
+    active: Joi.boolean(),
+  }).or('name', 'position', 'location', 'active'),
 }
 
 export const updateGenreSchema = {
