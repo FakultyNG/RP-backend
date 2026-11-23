@@ -17,7 +17,7 @@ new SharedRoutes(clientsRouter)
   .lives('Client')
   .profile('clients-auth')
   .paymentHistory({ caller: 'Others' })
-  .enums()
+  .enums('live')
   .paymentActions()
   .vidUpload()
 

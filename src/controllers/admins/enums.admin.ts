@@ -52,13 +52,26 @@ export class AdminEnumController {
     })
   })
 
-  static getCategories = Catch.async(async (req, res) => {
-    sendResponse({
-      res,
-      data: await CategoryEnumService.getCategories(req.query),
-      message: 'categories fetched',
+  static getCategories = (scope: 'all' | 'homepage' | 'live' = 'all') =>
+    Catch.async(async (req, res) => {
+      const query = { ...req.query }
+
+      if (scope === 'homepage') {
+        query.location = 'Homepage'
+        query.active = 'true'
+        delete query.scope
+      } else if (scope === 'live') {
+        query.scope = 'live'
+        query.active = 'true'
+        delete query.location
+      }
+
+      sendResponse({
+        res,
+        data: await CategoryEnumService.getCategories(query),
+        message: 'categories fetched',
+      })
     })
-  })
 
   static updateCategory = Catch.async(async (req, res) => {
     sendResponse({

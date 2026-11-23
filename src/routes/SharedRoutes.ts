@@ -62,8 +62,8 @@ export class SharedRoutes {
     return this
   }
 
-  enums() {
-    this._router.get('/get-categories', AdminEnumController.getCategories)
+  enums(categoryScope: 'all' | 'homepage' | 'live' = 'all') {
+    this._router.get('/get-categories', AdminEnumController.getCategories(categoryScope))
     this._router.get('/get-genres', AdminEnumController.getGenres)
     this._router.get('/get-casts', AdminEnumController.getCasts)
     this._router.get('/casts/:castId', AdminEnumController.getCastById)
