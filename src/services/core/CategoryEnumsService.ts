@@ -185,7 +185,17 @@ export class CategoryEnumService {
     await this.ensurePremiumAdsCategory()
     const filter: Record<string, unknown> = {}
     if (typeof query.location === 'string' && this.isCategoryLocation(query.location)) {
-      filter.location = query.location
+      if (query.location === 'Homepage') {
+        // Categories created before placements were introduced are Homepage
+        // rows. Keep them visible without allowing explicit Live/* rows in.
+        filter.$or = [
+          { location: 'Homepage' },
+          { location: { $exists: false } },
+          { location: null },
+        ]
+      } else {
+        filter.location = query.location
+      }
     } else if (query.scope === 'live') {
       filter.location = { $regex: '^Live/' }
     }
