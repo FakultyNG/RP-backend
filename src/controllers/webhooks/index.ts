@@ -2,8 +2,18 @@ import { createHmac } from 'node:crypto'
 import { WebhooksService } from '../../services/core/WebhooksService'
 import { Catch } from '../../utils/Catch'
 import env from '../../env'
+import { StorePurchaseService } from '../../services/core/StorePurchaseService'
 
 export class WebhooksController {
+  static appleStore = Catch.async(async (req, res) => {
+    await StorePurchaseService.reconcileAppleNotification(req.body?.signedPayload)
+    res.sendStatus(200)
+  })
+
+  static googlePlay = Catch.async(async (req, res) => {
+    await StorePurchaseService.reconcileGoogleNotification(req.body?.message?.data)
+    res.sendStatus(200)
+  })
   static paystack = Catch.async(async (req, res) => {
     const hash = createHmac('sha512', env.PAYSTACK_SECRET_KEY)
       .update(JSON.stringify(req.body))

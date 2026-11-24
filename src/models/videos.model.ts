@@ -1,5 +1,4 @@
 import { HydratedDocumentFromSchema, InferSchemaType, Schema, model } from 'mongoose'
-import { validCurrencies } from '../utils/currency'
 import { PhotoSchema } from './commonSchema'
 import { addYears, addYearsClone } from '../utils/date'
 
@@ -60,24 +59,20 @@ const schema = new Schema(
 
     vidClass: {
       type: String,
-      enum: ['free', 'ad', 'exclusive', 'premium'],
+      enum: ['free', 'premium'],
       required: true,
+    },
+
+    isReeplayOriginal: {
+      type: Boolean,
+      default: false,
+      index: true,
     },
 
     pg: {
       type: String,
       required: true,
     },
-
-    amount: {
-      type: Number,
-    },
-
-    currency: {
-      type: String,
-      enum: validCurrencies,
-    },
-
     genre: [
       {
         type: Schema.Types.ObjectId,

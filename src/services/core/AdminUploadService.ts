@@ -27,7 +27,6 @@ import { EpisodeModel } from '../../models/episodes.model'
 import { MulterFile, StringOrObjectId } from '../../types'
 import { validate } from '../../middlewares/requestValidator'
 import { videoUploadParents } from '../../models/assets'
-import { ValidCurrency } from '../../utils/currency'
 import { addSeriesSchema, addMovieOrSkitSchema, addMusicVideoSchema } from '../../validations/admin'
 import { UploadMediaUtils } from '../../utils/UploadMediaUtils'
 import { VideoUploadModel } from '../../models/videoupload.model'
@@ -143,9 +142,9 @@ export class AdminUploadService {
       primaryColor: data.primaryColor,
       description: data.description,
       vidClass: data.vidClass,
+      isReeplayOriginal: data.vidClass === 'premium' && Boolean(data.isReeplayOriginal),
       artistName: data.artistName,
       pg: data.pg,
-      amount: data.amount,
       genre: data.genre ?? [],
       category: data.category ?? [],
       cast: data.cast ?? [],
@@ -155,7 +154,6 @@ export class AdminUploadService {
       videoLink: data.videoLink,
       trailerLink: data.trailerLink,
       runtime: data.runtime,
-      currency: data.currency,
       active: data.active,
       showViews: data.showViews,
     })
@@ -165,10 +163,6 @@ export class AdminUploadService {
 
   protected static _checkCanUploadVideo = (incomingData: AddVideoParams['data']) => {
     this._validateAddVideoFileTypes(incomingData)
-
-    if (incomingData.vidClass === 'exclusive' && incomingData.amount == null) {
-      throw new OperationalError('amount is required when video class is exclusive', 400)
-    }
 
     if (incomingData.vidClass !== 'free' && isYouTubeUrl(incomingData.videoLink)) {
       throw new OperationalError(
@@ -482,8 +476,6 @@ export class AdminUploadService {
       : undefined
 
     if (data.description !== undefined) videoDocument.description = data.description
-    if (data.amount !== undefined) videoDocument.amount = data.amount
-    if (data.currency !== undefined) videoDocument.currency = data.currency
     if (data.title !== undefined) videoDocument.title = data.title
     if (data.primaryColor !== undefined) videoDocument.primaryColor = data.primaryColor
     if (typeof data.upcoming === 'boolean') {
@@ -491,6 +483,10 @@ export class AdminUploadService {
     }
     videoDocument.adminId = toObjectId(adminId)
     if (data.vidClass !== undefined) videoDocument.vidClass = data.vidClass as any
+    if (data.isReeplayOriginal !== undefined || data.vidClass === 'free') {
+      videoDocument.isReeplayOriginal =
+        videoDocument.vidClass === 'premium' && Boolean(data.isReeplayOriginal)
+    }
     if (data.artistName !== undefined) videoDocument.artistName = data.artistName
     if (data.pg !== undefined) videoDocument.pg = data.pg
 
@@ -882,8 +878,7 @@ export type MovieData = {
   releasedDate: string
   artistName?: string
 
-  amount?: number
-  currency?: ValidCurrency
+  isReeplayOriginal?: boolean
 
   active?: boolean
   showViews?: boolean

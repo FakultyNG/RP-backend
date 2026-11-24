@@ -10,7 +10,6 @@ const paymentUseCases = [
   'live schedule ext',
   'live-watch-exclusive',
   'video-watch-premium',
-  'video-watch-exclusive',
 ] as const
 
 export type PaymentUseCase = (typeof paymentUseCases)[number]

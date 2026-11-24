@@ -227,25 +227,26 @@ export class AdminUploadController {
       const video = await VideoModel.findById(params.vidId).select('vidClass')
       if (video == null) throw new OperationalError('invalid video id', 404)
 
-      let canPlayEpisodes = video.vidClass === 'free'
-      if (!canPlayEpisodes && !isGuestUser(currentUser)) {
-        canPlayEpisodes = (
-          await PaymentService.checkHasValidContentPayment({
+      await Promise.all(seasons.map(async season => {
+        let canPlaySeason = video.vidClass === 'free'
+        let accessEndsAt: Date | null = null
+        if (!canPlaySeason && !isGuestUser(currentUser)) {
+          const access = await PaymentService.checkHasValidContentPayment({
             currentUserId: currentUser._id,
-            contentId: video._id.toString(),
-            contentType: 'vod',
+            contentId: season._id.toString(),
+            contentType: 'season',
           })
-        ).canView
-      }
-
-      if (!canPlayEpisodes) {
-        seasons.forEach(season =>
+          canPlaySeason = access.canView
+          accessEndsAt = 'accessEndsAt' in access ? access.accessEndsAt ?? null : null
+        }
+        Object.assign(season, { canView: canPlaySeason, accessEndsAt })
+        if (!canPlaySeason) {
           season.episodes.forEach(episode => {
             const lockedEpisode = episode as typeof episode & { video?: string }
             delete lockedEpisode.video
-          }),
-        )
-      }
+          })
+        }
+      }))
     }
 
     sendResponse({

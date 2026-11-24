@@ -41,6 +41,7 @@ import { EpisodeModel } from '../../models/episodes.model'
 import { SeasonModel } from '../../models/seasons.model'
 import { MediaAccess } from '../../services/media-access'
 import {TopTenService} from '../../services/core/TopTenService'
+import { StorePurchaseService } from '../../services/core/StorePurchaseService'
 
 export type PaymentHistoryCaller = {
   caller: 'Admin' | 'Others'
@@ -491,6 +492,29 @@ export class SharedController extends UploadMediaUtils {
     sendResponse({
       res,
       data: { source },
+    })
+  })
+
+  static getStoreProducts = Catch.async(async (req, res) => {
+    const data = await StorePurchaseService.getProductsForContent({
+      currentUser: GetDefined.loggedInUser(req.user),
+      videoId: req.params.videoId,
+      seasonId: typeof req.query.seasonId === 'string' ? req.query.seasonId : undefined,
+    })
+    sendResponse({ res, data })
+  })
+
+  static verifyStorePurchase = Catch.async(async (req, res) => {
+    const data = await StorePurchaseService.verifyAndGrant({
+      currentUser: GetDefined.loggedInUser(req.user),
+      ...req.body,
+    })
+    sendResponse({
+      res,
+      data,
+      message: data.duplicate
+        ? 'Purchase already applied'
+        : 'Your 30-day access is ready',
     })
   })
 

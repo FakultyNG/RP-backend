@@ -365,7 +365,7 @@ export class SocialService {
       throw new OperationalError('Invalid vod id', 404)
     }
 
-    if (video.vidClass === 'premium' || video.vidClass === 'exclusive') {
+    if (video.vidClass === 'premium') {
       const access = await PaymentService.checkHasValidContentPayment({
         currentUserId: userId,
         contentId: parentId,

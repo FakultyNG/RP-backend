@@ -65,21 +65,11 @@ export const addMovieOrSkitSchema = Joi.object({
 
   video: Joi.object().optional(), //file
   videoLink: STRING_SCHEMA.optional(),
-  vidClass: STRING_SCHEMA.valid('free', 'ad', 'exclusive', 'premium').required(),
+  vidClass: VIDEO_CLASS_SCHEMA.required(),
+  isReeplayOriginal: Joi.boolean(),
 
   expiryDate: ISO_STRING_SCHEMA,
 
-  currency: Joi.when('vidClass', {
-    is: 'exclusive',
-    then: CURRENCY_SCHEMA.required(),
-    otherwise: Joi.forbidden(),
-  }),
-
-  amount: Joi.when('vidClass', {
-    is: 'exclusive',
-    then: Joi.number().strict().required(),
-    otherwise: Joi.forbidden(),
-  }),
 })
   .xor('trailerLink', 'trailer')
   .xor('video', 'videoLink')
@@ -88,6 +78,7 @@ export const addSeriesSchema = Joi.object({
   title: STRING_SCHEMA.required(),
   pg: STRING_SCHEMA.pattern(NUMERIC_REG).required(),
   vidClass: VIDEO_CLASS_SCHEMA.required(),
+  isReeplayOriginal: Joi.boolean(),
   category: MONGO_DB_OBJECT_ID_ARRAY_SCHEMA.required(),
   releasedDate: ISO_STRING_SCHEMA.required(),
   runtime: STRING_SCHEMA.optional(),
@@ -111,23 +102,13 @@ export const addSeriesSchema = Joi.object({
   cast: MONGO_DB_OBJECT_ID_ARRAY_SCHEMA.required(),
   expiryDate: ISO_STRING_SCHEMA,
 
-  currency: Joi.when('vidClass', {
-    is: 'exclusive',
-    then: CURRENCY_SCHEMA.required(),
-    otherwise: Joi.forbidden(),
-  }),
-
-  amount: Joi.when('vidClass', {
-    is: 'exclusive',
-    then: Joi.number().strict().required(),
-    otherwise: Joi.forbidden(),
-  }),
 }).oxor('trailerLink', 'trailer')
 
 export const addMusicVideoSchema = Joi.object({
   title: STRING_SCHEMA.required(),
   pg: STRING_SCHEMA.required(),
   vidClass: VIDEO_CLASS_SCHEMA.required(),
+  isReeplayOriginal: Joi.boolean(),
   category: MONGO_DB_OBJECT_ID_ARRAY_SCHEMA.required(),
   releasedDate: ISO_STRING_SCHEMA.required(),
   runtime: STRING_SCHEMA.required(),
@@ -153,17 +134,6 @@ export const addMusicVideoSchema = Joi.object({
   trailerLink: STRING_SCHEMA.optional(), // file
   trailer: Joi.object().optional(),
 
-  currency: Joi.when('vidClass', {
-    is: 'exclusive',
-    then: CURRENCY_SCHEMA.required(),
-    otherwise: Joi.forbidden(),
-  }),
-
-  amount: Joi.when('vidClass', {
-    is: 'exclusive',
-    then: Joi.number().strict().required(),
-    otherwise: Joi.forbidden(),
-  }),
 })
   .xor('trailerLink', 'trailer')
   .xor('video', 'videoLink')
@@ -172,6 +142,7 @@ export const editVideoSchema = Joi.object({
   title: STRING_SCHEMA,
   pg: STRING_SCHEMA,
   vidClass: VIDEO_CLASS_SCHEMA,
+  isReeplayOriginal: Joi.boolean(),
   releasedDate: ISO_STRING_SCHEMA,
   runtime: STRING_SCHEMA,
   defaultRating: STRING_SCHEMA.pattern(FLOATS_REG),
@@ -184,8 +155,6 @@ export const editVideoSchema = Joi.object({
   genre: MONGO_DB_OBJECT_ID_ARRAY_SCHEMA,
   cast: MONGO_DB_OBJECT_ID_ARRAY_SCHEMA,
 
-  amount: Joi.number().strict(),
-  currency: Joi.string().valid('USD', 'NGN', 'GMD'),
 
   // files
   landscapePoster: Joi.object(),
@@ -241,24 +210,13 @@ export const addLiveSchema = Joi.object({
     otherwise: Joi.forbidden(),
   }),
   description: STRING_SCHEMA.required(),
-  vidClass: STRING_SCHEMA.valid('free', 'ad', 'exclusive', 'premium').required(),
+  vidClass: VIDEO_CLASS_SCHEMA.required(),
   type: LIVE_TYPE_SCHEMA.required(),
   sponsored: Joi.boolean(),
   upcoming: Joi.boolean(),
   popular: Joi.boolean(),
   location: STRING_SCHEMA.required(),
 
-  currency: Joi.when('vidClass', {
-    is: 'exclusive',
-    then: CURRENCY_SCHEMA.required(),
-    otherwise: Joi.forbidden(),
-  }),
-
-  amount: Joi.when('vidClass', {
-    is: 'exclusive',
-    then: Joi.number().strict().required(),
-    otherwise: Joi.forbidden(),
-  }),
 })
 
 export const createUpcomingEventSchema = Joi.object({

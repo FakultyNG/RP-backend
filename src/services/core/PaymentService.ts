@@ -31,6 +31,8 @@ import { ExpressRequestQuery, QueryParamsFeatures } from '../../utils/QueryParam
 import { toObjectId } from '../../repositories/VideoRepo'
 import { Flutterwave } from '../../paymentIntegration/flutterwave'
 import { WavePayment } from '../../paymentIntegration/wave'
+import { StorePurchaseService } from './StorePurchaseService'
+import { SeasonModel } from '../../models/seasons.model'
 
 type PaystackTransaction = Awaited<ReturnType<typeof Paystack.verifyPayment>>
 type PaymentStatus = PaymentSchema['status']
@@ -674,12 +676,7 @@ export class PaymentService {
     payment: PaymentDocument,
     videoId?: string,
   ) => {
-    const expectedAmount =
-      payment.currency === 'NGN'
-        ? env.NGN_PREMIUM_CONTENT_COST
-        : payment.currency === 'USD'
-          ? env.USD_PREMIUM_CONTENT_COST
-          : null
+    const expectedAmount = payment.currency === 'USD' ? env.PREMIUM_MOVIE_PRICE_USD : null
 
     if (expectedAmount == null || payment.amount !== expectedAmount) {
       throw new OperationalError('payment amount does not match premium content cost', 403)
@@ -689,29 +686,6 @@ export class PaymentService {
 
     if (video.vidClass !== 'premium') {
       throw new OperationalError('this is not a premium content', 403)
-    }
-  }
-
-  protected static _validateWatchExclusiveVOD = async (
-    payment: PaymentDocument,
-    videoId?: string,
-  ) => {
-    const video = await this._getVideoById(videoId)
-
-    if (video.vidClass !== 'exclusive') {
-      throw new OperationalError('this is not an exclusive content', 403)
-    }
-
-    if (payment.currency !== video.currency) {
-      throw new OperationalError('currency mismatch for payment and content', 403)
-    }
-
-    if (video.currency == null || video.amount == null) {
-      throw new OperationalError('currency and amount are expected on exclusive contents', 403)
-    }
-
-    if (payment.amount !== video.amount) {
-      throw new OperationalError('payment amout does not match video cost', 403)
     }
   }
 
@@ -776,9 +750,6 @@ export class PaymentService {
         await this._validateWatchPremiumVOD(payment, videoId)
         break
 
-      case 'video-watch-exclusive':
-        await this._validateWatchExclusiveVOD(payment, videoId)
-        break
       default:
         throw new OperationalError('unsupported wallet payment', 400)
     }
@@ -841,7 +812,6 @@ export class PaymentService {
 
     const isContentPurchase =
       useCase === 'video-watch-premium' ||
-      useCase === 'video-watch-exclusive' ||
       useCase === 'live-watch-exclusive'
 
     if (isContentPurchase && method !== 'wallet') {
@@ -1097,8 +1067,20 @@ export class PaymentService {
 
   static checkContentCosts = () => {
     const costs = {
-      premiumNGN: env.NGN_PREMIUM_CONTENT_COST,
-      premiumUSD: env.USD_PREMIUM_CONTENT_COST,
+      baseCurrency: 'USD',
+      premiumMovie: env.PREMIUM_MOVIE_PRICE_USD,
+      premiumSeason: env.PREMIUM_SEASON_PRICE_USD,
+      accessDays: env.CONTENT_ACCESS_DAYS,
+      storeProducts: {
+        apple: {
+          movie: env.APPLE_MOVIE_PRODUCT_ID,
+          season: env.APPLE_SEASON_PRODUCT_ID,
+        },
+        google: {
+          movie: env.GOOGLE_MOVIE_PRODUCT_ID,
+          season: env.GOOGLE_SEASON_PRODUCT_ID,
+        },
+      },
       eventHourlyChargeNGN: env.EVENT_HOURLY_CHARGES_NGN,
       eventHourlyChargeUSD: env.EVENT_HOURLY_CHARGES_USD,
       payoutServiceCharge: env.PAYOUT_SERVICE_CHARGE,
@@ -1112,15 +1094,33 @@ export class PaymentService {
     contentType,
     currentUserId,
   }: CheckHasValidContentPaymentInput) => {
-    if (contentType !== 'vod' && contentType !== 'live') {
-      throw new OperationalError('allowed contentType is vod OR live', 400)
+    if (contentType !== 'vod' && contentType !== 'live' && contentType !== 'season') {
+      throw new OperationalError('allowed contentType is vod, season OR live', 400)
+    }
+
+    if (contentType === 'season') {
+      const season = await SeasonModel.findById(contentId).select('video')
+      if (!season) throw new OperationalError('season not found', 404)
+      return StorePurchaseService.hasAccess({
+        currentUserId,
+        videoId: season.video.toString(),
+        seasonId: season._id.toString(),
+      })
+    }
+
+    if (contentType === 'vod') {
+      const storeAccess = await StorePurchaseService.hasAccess({
+        currentUserId,
+        videoId: contentId,
+      })
+      if (storeAccess.canView) return storeAccess
     }
 
     const contentKey = contentType === 'live' ? 'liveId' : 'videoId'
     const validUseCases: PaymentUseCase[] =
       contentType === 'live'
         ? ['live-watch-exclusive']
-        : ['video-watch-premium', 'video-watch-exclusive']
+        : ['video-watch-premium']
 
     const dateAgo = new Date()
     addDays(dateAgo, -30)

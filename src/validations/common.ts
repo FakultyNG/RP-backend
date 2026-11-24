@@ -37,7 +37,7 @@ export const LIVE_TYPE_SCHEMA = STRING_SCHEMA.valid(
 
 export const ISO_STRING_SCHEMA = STRING_SCHEMA.isoDate()
 
-export const VIDEO_CLASS_SCHEMA = STRING_SCHEMA.valid('free', 'ad', 'exclusive', 'premium')
+export const VIDEO_CLASS_SCHEMA = STRING_SCHEMA.valid('free', 'premium')
 
 export const updateUserProfileSchema = {
   body: Joi.object({
@@ -91,7 +91,6 @@ export const initiatePaymentSchema = {
       'live schedule ext',
       'live-watch-exclusive',
       'video-watch-premium',
-      'video-watch-exclusive',
     ).required(),
 
     email: Joi.when('useCase', {
@@ -106,7 +105,7 @@ export const initiatePaymentSchema = {
       'live-watch-exclusive',
       'live schedule',
     ),
-    videoId: requiredForUseCases('video-watch-premium', 'video-watch-exclusive'),
+    videoId: requiredForUseCases('video-watch-premium'),
     voteInfoId: requiredForUseCases('vote'),
     contestantId: requiredForUseCases('vote'),
   }),
@@ -116,5 +115,24 @@ export const authorizePaymentSchema = {
   body: Joi.object({
     amount: Joi.number().strict().required(),
     paymentDetailsId: MONGO_DB_OBJECT_ID_SCHEMA.required(),
+  }),
+}
+
+export const verifyStorePurchaseSchema = {
+  body: Joi.object({
+    provider: STRING_SCHEMA.valid('apple', 'google').required(),
+    productId: STRING_SCHEMA.required(),
+    transactionId: STRING_SCHEMA.when('provider', {
+      is: 'apple',
+      then: STRING_SCHEMA.required(),
+      otherwise: STRING_SCHEMA.optional(),
+    }),
+    purchaseToken: STRING_SCHEMA.when('provider', {
+      is: 'google',
+      then: STRING_SCHEMA.required(),
+      otherwise: STRING_SCHEMA.optional(),
+    }),
+    videoId: MONGO_DB_OBJECT_ID_SCHEMA.required(),
+    seasonId: MONGO_DB_OBJECT_ID_SCHEMA.optional(),
   }),
 }

@@ -7,6 +7,7 @@ import {
   authorizePaymentSchema,
   initiatePaymentSchema,
   updateUserProfileSchema,
+  verifyStorePurchaseSchema,
 } from '../validations/common'
 
 import { AuthHeaderKey } from '../middlewares/auth'
@@ -98,6 +99,12 @@ export class SharedRoutes {
     this._router.put('/should-store/:paymentId', SharedController.setPaymentShouldStoreDetails)
     this._router.get('/payment-details', SharedController.fetchPaymentDetails)
     this._router.get('/content-costs', SharedController.checkContentCosts)
+    this._router.get('/store-products/:videoId', SharedController.getStoreProducts)
+    this._router.post(
+      '/store-purchases/verify',
+      requestValidator(verifyStorePurchaseSchema),
+      SharedController.verifyStorePurchase,
+    )
 
     this._router.get(
       '/check-content-payment/:contentType/:contentId',

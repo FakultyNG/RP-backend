@@ -12,7 +12,6 @@ import { videoUploadParents } from '../models/assets'
 import { addSeriesSchema, addMovieOrSkitSchema, addMusicVideoSchema } from '../validations/admin'
 import { validate } from '../middlewares/requestValidator'
 
-import { ValidCurrency } from './currency'
 import { VideoUploadModel } from '../models/videoupload.model'
 
 type RequestFiles =
@@ -51,6 +50,7 @@ export type MovieData = {
   pg: string
   description: string
   vidClass: Video['vidClass']
+  isReeplayOriginal?: boolean
   primaryColor: string
 
   defaultRating?: string
@@ -60,9 +60,6 @@ export type MovieData = {
   expiryDate?: string
   releasedDate: string
   artistName?: string
-
-  amount?: number
-  currency?: ValidCurrency
 
   active?: boolean
   showViews?: boolean

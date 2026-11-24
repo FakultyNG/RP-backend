@@ -72,7 +72,7 @@ const schema = new Schema(
 
     vid_class: {
       type: String,
-      enum: ['free', 'ad', 'exclusive', 'premium'],
+      enum: ['free', 'premium'],
       required: true,
     },
 
