@@ -53,6 +53,9 @@ export class MediaManagement {
   static upload480pAndInitiateMediaConvert = async (file: MulterFile, expire?: Date) =>
     this.uploadAndInitiateMediaConvert(file, expire, MediaConvert.transcode480p)
 
+  static upload720pAndInitiateMediaConvert = async (file: MulterFile, expire?: Date) =>
+    this.uploadAndInitiateMediaConvert(file, expire, MediaConvert.transcode720p)
+
   static storeNotificationSound = (file: MulterFile) =>
     this._storeObjectFile(file, AwsUtils.buckets.replayImages)
 
@@ -115,11 +118,7 @@ export class MediaManagement {
 
     let buffer: Buffer
     try {
-      const input = file.buffer?.length
-        ? file.buffer
-        : file.path
-          ? await readFile(file.path)
-          : null
+      const input = file.buffer?.length ? file.buffer : file.path ? await readFile(file.path) : null
       if (!input) throw new OperationalError('Uploaded image is empty', 400)
 
       buffer = await sharp(input, { failOn: 'error' })

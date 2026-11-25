@@ -23,7 +23,7 @@ type HlsRendition = {
   nameModifier: '_480p' | '_720p' | '_1080p'
 }
 
-export type HlsTranscodeProfile = 'adaptive' | 'single-480p'
+export type HlsTranscodeProfile = 'adaptive' | 'single-480p' | 'single-720p'
 
 const HLS_480P_RENDITION: HlsRendition = {
   width: 854,
@@ -32,14 +32,16 @@ const HLS_480P_RENDITION: HlsRendition = {
   nameModifier: '_480p',
 }
 
+const HLS_720P_RENDITION: HlsRendition = {
+  width: 1280,
+  height: 720,
+  maxBitrate: 3_500_000,
+  nameModifier: '_720p',
+}
+
 const HLS_ADAPTIVE_RENDITIONS: HlsRendition[] = [
   HLS_480P_RENDITION,
-  {
-    width: 1280,
-    height: 720,
-    maxBitrate: 3_500_000,
-    nameModifier: '_720p',
-  },
+  HLS_720P_RENDITION,
   {
     width: 1920,
     height: 1080,
@@ -48,12 +50,7 @@ const HLS_ADAPTIVE_RENDITIONS: HlsRendition[] = [
   },
 ]
 
-const createHlsOutput = ({
-  width,
-  height,
-  maxBitrate,
-  nameModifier,
-}: HlsRendition): Output => ({
+const createHlsOutput = ({ width, height, maxBitrate, nameModifier }: HlsRendition): Output => ({
   ContainerSettings: {
     Container: 'M3U8',
     M3u8Settings: {
@@ -200,7 +197,12 @@ export class MediaConvert {
     const fileInput = AwsUtils.buckets.s3Input + key
     const destination = `${AwsUtils.buckets.railwayHlsOutput}${key}/master`
     const isSingle480p = profile === 'single-480p'
-    const renditions = isSingle480p ? [HLS_480P_RENDITION] : HLS_ADAPTIVE_RENDITIONS
+    const isSingle720p = profile === 'single-720p'
+    const renditions = isSingle480p
+      ? [HLS_480P_RENDITION]
+      : isSingle720p
+        ? [HLS_720P_RENDITION]
+        : HLS_ADAPTIVE_RENDITIONS
 
     const params: CreateJobCommandInput = {
       Role: env.IAM_ROLE_ARN,
@@ -209,7 +211,11 @@ export class MediaConvert {
       UserMetadata: {
         application: 'reeplay',
         backend: 'railway',
-        pipeline: isSingle480p ? 'railway-hls-480p' : 'railway-hls-adaptive',
+        pipeline: isSingle480p
+          ? 'railway-hls-480p'
+          : isSingle720p
+            ? 'railway-hls-720p'
+            : 'railway-hls-adaptive',
         profile,
         inputKey: key,
       },
@@ -233,7 +239,9 @@ export class MediaConvert {
           {
             Name: isSingle480p
               ? 'railway-reeplay-hls-480'
-              : 'railway-reeplay-hls-480-720-1080',
+              : isSingle720p
+                ? 'railway-reeplay-hls-720'
+                : 'railway-reeplay-hls-480-720-1080',
             Outputs: renditions.map(createHlsOutput),
             OutputGroupSettings: {
               Type: 'HLS_GROUP_SETTINGS',
@@ -265,4 +273,6 @@ export class MediaConvert {
   }
 
   static transcode480p = (key: string) => MediaConvert.transcode(key, 'single-480p')
+
+  static transcode720p = (key: string) => MediaConvert.transcode(key, 'single-720p')
 }

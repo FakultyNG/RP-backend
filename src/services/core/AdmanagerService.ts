@@ -12,8 +12,10 @@ import { UploadMediaUtils } from '../../utils/UploadMediaUtils'
 import { CategoryEnumService } from './CategoryEnumsService'
 import { CampaignReportService } from './CampaignReportService'
 
-export interface CreateAdData
-  extends Omit<AdSchema, 'createdAt' | 'updatedAt' | 'video' | 'photo'> {
+export interface CreateAdData extends Omit<
+  AdSchema,
+  'createdAt' | 'updatedAt' | 'video' | 'photo'
+> {
   videoFile: MulterFile
   imageFile: MulterFile
 }
@@ -75,9 +77,10 @@ export class AdManagerService {
       })
       if (includeReporting) {
         return Object.assign(resolved, {
-          reportLink: ad.reportDelivery === 'live_link'
-            ? CampaignReportService.reportLink(ad._id.toString(), ad.reportTokenVersion)
-            : undefined,
+          reportLink:
+            ad.reportDelivery === 'live_link'
+              ? CampaignReportService.reportLink(ad._id.toString(), ad.reportTokenVersion)
+              : undefined,
         })
       }
       return Object.assign(resolved, {
@@ -95,7 +98,7 @@ export class AdManagerService {
   protected static _uploadMedia = async ({ videoFile, imageFile, expire }: UploadMediaInput) => {
     const [imageUploadResult, videoUploadResult] = await Promise.allSettled([
       MediaManagement.storeImageAndSubtitle(imageFile, expire, 'landscape-poster'),
-      MediaManagement.upload480pAndInitiateMediaConvert(videoFile, expire),
+      MediaManagement.upload720pAndInitiateMediaConvert(videoFile, expire),
     ])
 
     if (imageUploadResult.status === 'rejected') {
@@ -216,7 +219,9 @@ export class AdManagerService {
       duration,
       cta,
       active,
-      advertiserEmails: [...new Set((advertiserEmails ?? []).map(email => email.trim().toLowerCase()))],
+      advertiserEmails: [
+        ...new Set((advertiserEmails ?? []).map(email => email.trim().toLowerCase())),
+      ],
       reportDelivery: reportDelivery ?? 'none',
       reportFrequency: reportFrequency ?? 'weekly',
       reportTimezone: reportTimezone ?? 'Africa/Lagos',
@@ -248,7 +253,9 @@ export class AdManagerService {
     }
 
     const { startAt, expireAt } = this._schedule(data.start, data.expiry)
-    const advertiserEmails = [...new Set((data.advertiserEmails ?? []).map(email => email.trim().toLowerCase()))]
+    const advertiserEmails = [
+      ...new Set((data.advertiserEmails ?? []).map(email => email.trim().toLowerCase())),
+    ]
     const reportDelivery = data.reportDelivery ?? 'none'
     const reportFrequency = data.reportFrequency ?? 'weekly'
     const reportTimezone = data.reportTimezone ?? 'Africa/Lagos'
@@ -271,7 +278,7 @@ export class AdManagerService {
     }
 
     if (data.videoFile) {
-      const uploadedVideo = await MediaManagement.upload480pAndInitiateMediaConvert(
+      const uploadedVideo = await MediaManagement.upload720pAndInitiateMediaConvert(
         data.videoFile,
         expireAt,
       )
@@ -311,7 +318,10 @@ export class AdManagerService {
     if (data.imageFile) {
       cleanup.push(MediaManagement.deleteObject(previousPhoto.Key, previousPhoto.Bucket))
     }
-    if (previousVideoUpload && previousVideoUpload.toString() !== replacementVideoUpload?.toString()) {
+    if (
+      previousVideoUpload &&
+      previousVideoUpload.toString() !== replacementVideoUpload?.toString()
+    ) {
       cleanup.push(Purge.videoUploadById(previousVideoUpload))
     }
     await Promise.allSettled(cleanup)

@@ -194,7 +194,7 @@ export class AdminUploadService {
     }
 
     if (params.data.trailer) {
-      const trailerUpload = await MediaManagement.upload480pAndInitiateMediaConvert(
+      const trailerUpload = await MediaManagement.upload720pAndInitiateMediaConvert(
         params.data.trailer,
         expiry,
       )
@@ -337,7 +337,7 @@ export class AdminUploadService {
       if (episode.trailerUpload) replacedUploads.push(episode.trailerUpload)
 
       if (data.trailer) {
-        const upload = await MediaManagement.upload480pAndInitiateMediaConvert(data.trailer)
+        const upload = await MediaManagement.upload720pAndInitiateMediaConvert(data.trailer)
         const uploadDocument = UploadMediaUtils.getVideoUploadDocument(upload)
         uploadDocument.parentId = episode._id
         uploadDocument.parentType = 'episode-trailer'
@@ -415,7 +415,7 @@ export class AdminUploadService {
     })
 
     if (data.trailer) {
-      const trailerUpload = await MediaManagement.upload480pAndInitiateMediaConvert(data.trailer)
+      const trailerUpload = await MediaManagement.upload720pAndInitiateMediaConvert(data.trailer)
       const videoUploadDocument = UploadMediaUtils.getVideoUploadDocument(trailerUpload)
       videoUploadDocument.parentId = episodeDocument._id
       videoUploadDocument.parentType = 'episode-trailer'
@@ -490,8 +490,7 @@ export class AdminUploadService {
     if (data.artistName !== undefined) videoDocument.artistName = data.artistName
     if (data.pg !== undefined) videoDocument.pg = data.pg
 
-    const replaceReferences = (references: string[]) =>
-      [...new Set(references)].map(toObjectId)
+    const replaceReferences = (references: string[]) => [...new Set(references)].map(toObjectId)
 
     // Edit payloads represent the complete selected taxonomy. Replacing these
     // arrays is required so deselected values are actually removed in MongoDB.
@@ -590,7 +589,7 @@ export class AdminUploadService {
       videoDocument.trailerLink = undefined
       videoDocument.isTrailerReady = false
     } else if (data.trailer) {
-      const trailerUpload = await MediaManagement.upload480pAndInitiateMediaConvert(
+      const trailerUpload = await MediaManagement.upload720pAndInitiateMediaConvert(
         data.trailer,
         expiry,
       )
@@ -726,7 +725,7 @@ export class AdminUploadService {
           id: null,
           kind,
           label,
-          status: ready ? 'ready' as const : 'missing' as const,
+          status: ready ? ('ready' as const) : ('missing' as const),
           progress: ready ? 100 : 0,
           error: null,
         }
@@ -734,7 +733,14 @@ export class AdminUploadService {
 
       const upload = await VideoUploadModel.findById(uploadId)
       if (upload == null) {
-        return { id: String(uploadId), kind, label, status: 'missing' as const, progress: 0, error: 'Upload record not found' }
+        return {
+          id: String(uploadId),
+          kind,
+          label,
+          status: 'missing' as const,
+          progress: 0,
+          error: 'Upload record not found',
+        }
       }
 
       if (live && !upload.isTranscoded && upload.hlsStatus !== 'failed') {
@@ -759,7 +765,7 @@ export class AdminUploadService {
         id: upload._id.toString(),
         kind,
         label,
-        status: upload.isTranscoded ? 'ready' as const : upload.hlsStatus,
+        status: upload.isTranscoded ? ('ready' as const) : upload.hlsStatus,
         progress,
         providerStatus,
         error: upload.hlsError ?? null,
@@ -770,8 +776,12 @@ export class AdminUploadService {
     let items: Awaited<ReturnType<typeof buildUploadStatus>>[] = []
     if (video.type === 'series') {
       const seasons = await SeasonModel.find({ video: video._id }).select('_id serial_number')
-      const seasonNumbers = new Map(seasons.map(season => [season._id.toString(), season.serial_number]))
-      const episodes = await EpisodeModel.find({ season: { $in: seasons.map(season => season._id) } })
+      const seasonNumbers = new Map(
+        seasons.map(season => [season._id.toString(), season.serial_number]),
+      )
+      const episodes = await EpisodeModel.find({
+        season: { $in: seasons.map(season => season._id) },
+      })
         .select('season episodeNumber title isVideoReady isTrailerReady videoUpload trailerUpload')
         .sort({ season: 1, episodeNumber: 1 })
 
@@ -779,11 +789,21 @@ export class AdminUploadService {
         episodes.flatMap(episode => {
           const prefix = `S${seasonNumbers.get(episode.season.toString()) ?? '?'} E${episode.episodeNumber}`
           const statuses = [
-            buildUploadStatus(episode.videoUpload, Boolean(episode.isVideoReady), 'main', `${prefix} · ${episode.title}`),
+            buildUploadStatus(
+              episode.videoUpload,
+              Boolean(episode.isVideoReady),
+              'main',
+              `${prefix} · ${episode.title}`,
+            ),
           ]
           if (episode.trailerUpload || episode.isTrailerReady) {
             statuses.push(
-              buildUploadStatus(episode.trailerUpload, Boolean(episode.isTrailerReady), 'trailer', `${prefix} trailer`),
+              buildUploadStatus(
+                episode.trailerUpload,
+                Boolean(episode.isTrailerReady),
+                'trailer',
+                `${prefix} trailer`,
+              ),
             )
           }
           return statuses
@@ -798,12 +818,15 @@ export class AdminUploadService {
     }
 
     const mainItems = items.filter(item => item.kind === 'main')
-    const hasProcessing = items.some(item => item.status === 'pending' || item.status === 'processing')
+    const hasProcessing = items.some(
+      item => item.status === 'pending' || item.status === 'processing',
+    )
     const hasFailure = items.some(item => item.status === 'failed' || item.status === 'missing')
-    const mediaReady = video.type === 'series'
-      ? mainItems.some(item => item.status === 'ready')
-      : mainItems.every(item => item.status === 'ready') &&
-        items.filter(item => item.kind === 'trailer').every(item => item.status === 'ready')
+    const mediaReady =
+      video.type === 'series'
+        ? mainItems.some(item => item.status === 'ready')
+        : mainItems.every(item => item.status === 'ready') &&
+          items.filter(item => item.kind === 'trailer').every(item => item.status === 'ready')
     const now = new Date()
     const released = !video.releaseDate || video.releaseDate <= now
     const unexpired = !video.expiryDate || video.expiryDate > now
