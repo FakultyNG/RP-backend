@@ -1,5 +1,6 @@
 import { PlatformSettingsModel } from '../../models/platformSettings.model'
 import { Password } from '../../utils/Password'
+import { StringOrObjectId } from '../../types'
 
 // High-entropy one-time bootstrap credential. Rotate it from Super Admin Settings.
 const GIFT_CARD_BOOTSTRAP_CODE_HASH =
@@ -30,6 +31,64 @@ export class PlatformSettingsService {
 
     this.guestAccessCache = settings.guestAccessEnabled
     return this.guestAccessCache
+  }
+
+  static getLiveAccess = async () => {
+    const settings = await PlatformSettingsModel.findOneAndUpdate(
+      { key: 'global' },
+      { $setOnInsert: { guestAccessEnabled: false, liveEnabled: true } },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    )
+
+    return {
+      enabled: settings.liveEnabled,
+      updatedAt: settings.liveUpdatedAt ?? settings.updatedAt,
+    }
+  }
+
+  static getLiveAccessForAdmin = async () => {
+    const settings = await PlatformSettingsModel.findOneAndUpdate(
+      { key: 'global' },
+      { $setOnInsert: { guestAccessEnabled: false, liveEnabled: true } },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    ).populate('liveUpdatedBy', 'first_name last_name email')
+
+    const updatedBy = settings.liveUpdatedBy as unknown as null | {
+      _id: StringOrObjectId
+      first_name?: string
+      last_name?: string
+      email?: string
+    }
+
+    return {
+      enabled: settings.liveEnabled,
+      updatedAt: settings.liveUpdatedAt ?? settings.updatedAt,
+      updatedBy: updatedBy
+        ? {
+            id: updatedBy._id.toString(),
+            name: [updatedBy.first_name, updatedBy.last_name].filter(Boolean).join(' '),
+            email: updatedBy.email ?? '',
+          }
+        : null,
+    }
+  }
+
+  static setLiveAccess = async (enabled: boolean, updatedBy: StringOrObjectId) => {
+    const changedAt = new Date()
+    await PlatformSettingsModel.findOneAndUpdate(
+      { key: 'global' },
+      {
+        $set: {
+          liveEnabled: enabled,
+          liveUpdatedBy: updatedBy,
+          liveUpdatedAt: changedAt,
+        },
+        $setOnInsert: { guestAccessEnabled: false },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    )
+
+    return this.getLiveAccessForAdmin()
   }
 
   private static getGiftCardAuthorizationCodeHash = async () => {

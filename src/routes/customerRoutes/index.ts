@@ -31,6 +31,7 @@ import { SharedController } from '../../controllers/common/shared.controller'
 import { Multer } from '../../utils/Multer'
 import { notificationRouter } from './notificationRouter'
 import { CustomerAnalyticsController } from '../../controllers/customers/analytics.customer'
+import { PlatformSettingsController } from '../../controllers/common/platformSettings.controller'
 
 export const customerRouter = Router()
 
@@ -88,8 +89,8 @@ customerRouter.use('/ratings', RatingsRouter)
 customerRouter.use('/socials', SocialsRouter)
 customerRouter.use('/media', MediaRouter)
 customerRouter.use('/enums', EnumsRouter)
-customerRouter.use('/live/events', LivesRouter)
-customerRouter.use('/livestream', LivestreamRouter)
+customerRouter.use('/live/events', PlatformSettingsController.requireLiveAccess, LivesRouter)
+customerRouter.use('/livestream', PlatformSettingsController.requireLiveAccess, LivestreamRouter)
 customerRouter.use('/subscription', SubscriptionRuuter)
 customerRouter.use('/notification', PushNotificationRouter)
 // customerRouter.use('/notifications', NotificationsRouter)

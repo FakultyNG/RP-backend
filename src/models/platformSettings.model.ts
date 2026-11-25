@@ -13,6 +13,20 @@ const schema = new Schema(
       default: false,
       required: true,
     },
+    liveEnabled: {
+      type: Boolean,
+      default: true,
+      required: true,
+    },
+    liveUpdatedBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'users',
+      default: null,
+    },
+    liveUpdatedAt: {
+      type: Date,
+      default: null,
+    },
     giftCardAuthorizationCodeHash: {
       type: String,
       select: false,

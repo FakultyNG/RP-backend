@@ -21,6 +21,7 @@ import { MediaConvert } from '../services/aws/mediaConvert'
 import { AdManagerService } from '../services/core/AdmanagerService'
 import { CampaignReportService } from '../services/core/CampaignReportService'
 import { ContentLifecycleNotificationService } from '../services/core/ContentLifecycleNotificationService'
+import { PlatformSettingsService } from '../services/core/PlatformSettingsService'
 
 export class CronTaskHandlers {
   protected static checkTranscodedParentDocumentOrThrow = (
@@ -234,6 +235,8 @@ export class CronTaskHandlers {
   static handleOneHourLiveEventPushReminder = async () => {
     console.log('handleOneHourLiveEventPushReminder started')
 
+    if (!(await PlatformSettingsService.getLiveAccess()).enabled) return
+
     const batchGenerator = liveEvents1hrReminderGenerator({
       batchSize: 20,
     })
@@ -271,6 +274,8 @@ export class CronTaskHandlers {
 
   static handle24HourLiveEventPushReminder = async () => {
     console.log('handle24HourLiveEventPushReminder started')
+
+    if (!(await PlatformSettingsService.getLiveAccess()).enabled) return
 
     const batchGenerator = liveEvents24hReminderGenerator({
       batchSize: 20,
@@ -310,6 +315,8 @@ export class CronTaskHandlers {
   }
   static handle10MinutesLiveEventPushReminder = async () => {
     console.log('handle10MinutesLiveEventPushReminder started')
+
+    if (!(await PlatformSettingsService.getLiveAccess()).enabled) return
 
     const batchGenerator = liveEvents10MReminderGenerator({
       batchSize: 20,

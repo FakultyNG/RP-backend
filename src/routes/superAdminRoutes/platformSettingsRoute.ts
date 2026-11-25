@@ -12,3 +12,11 @@ superAdminPlatformSettingsRouter
     requestValidator({ body: Joi.object({ enabled: Joi.boolean().required() }) }),
     PlatformSettingsController.setGuestAccess,
   )
+
+superAdminPlatformSettingsRouter
+  .route('/live-access')
+  .get(PlatformSettingsController.getLiveAccessForAdmin)
+  .put(
+    requestValidator({ body: Joi.object({ enabled: Joi.boolean().required() }) }),
+    PlatformSettingsController.setLiveAccess,
+  )

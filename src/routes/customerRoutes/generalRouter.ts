@@ -5,6 +5,7 @@ import { PlatformSettingsController } from '../../controllers/common/platformSet
 export const router = Router()
 
 router.get('/guest-access', PlatformSettingsController.getGuestAccess)
+router.get('/live-access', PlatformSettingsController.getLiveAccess)
 router.get('/validate-token', OnboardingController.authTokenValidity)
 router.get('/validate-reftoken', OnboardingController.refTokenValidity)
 router.get('/renew-accesstoken', OnboardingController.refreshAccessToken)

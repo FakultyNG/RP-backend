@@ -11,6 +11,7 @@ import { ExpressRequestQuery, QueryParamsFeatures } from '../../utils/QueryParam
 import { NotificationRepo } from '../../repositories/NotificationRepo'
 import { SettingsModel } from '../../models/userSettings.model'
 import { Notification, NotificationAudience } from '../../notifications/notification'
+import { PlatformSettingsService } from './PlatformSettingsService'
 
 interface GetNotificationsInput {
   currentUser: LoggedInUser
@@ -54,8 +55,11 @@ interface CreateAutomatedNotification {
 }
 
 export class NotificationService {
-  static getUnreadCount = (currentUser: LoggedInUser) =>
-    NotificationRepo.countUnreadUserNotifications(currentUser._id)
+  static getUnreadCount = async (currentUser: LoggedInUser) =>
+    NotificationRepo.countUnreadUserNotifications(
+      currentUser._id,
+      (await PlatformSettingsService.getLiveAccess()).enabled,
+    )
 
   static createStoredAdminNotification = async ({
     currentUser,
@@ -103,6 +107,9 @@ export class NotificationService {
     metadata = {},
     photo,
   }: CreateAutomatedNotification) => {
+    if (audience === 'live_channels' && !(await PlatformSettingsService.getLiveAccess()).enabled) {
+      return false
+    }
     if (await AdminNotificationModel.exists({ eventKey })) return false
 
     let notification
@@ -213,6 +220,7 @@ export class NotificationService {
       userId: currentUser._id,
       skip,
       limit,
+      includeLive: (await PlatformSettingsService.getLiveAccess()).enabled,
     })
 
     return notifications.map(notification => {

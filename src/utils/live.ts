@@ -5,6 +5,7 @@ import { genRandUniqId } from './strGen'
 import { validCurrencies, ValidCurrency } from './currency'
 import { Notification } from '../notifications/notification'
 import { ContentLifecycleNotificationService } from '../services/core/ContentLifecycleNotificationService'
+import { PlatformSettingsService } from '../services/core/PlatformSettingsService'
 
 interface CalculateEventChargesParams {
   start: string
@@ -54,25 +55,27 @@ export const handleRTMPStreamPublish = async (streamKey: unknown) => {
     },
   })
 
-  await Notification.sendTopicPushNotification(Notification.makeContentTopic(liveId, 'LIVE'), {
-    title: 'Update',
-    type: 'LIVE_EVENT_REMINDER',
-    body: `It's LIVE now: ${liveDocument.title} Tap to Join`,
-    image,
-    metadata: { liveId },
-  }, true)
+  if ((await PlatformSettingsService.getLiveAccess()).enabled) {
+    await Notification.sendTopicPushNotification(Notification.makeContentTopic(liveId, 'LIVE'), {
+      title: 'Update',
+      type: 'LIVE_EVENT_REMINDER',
+      body: `It's LIVE now: ${liveDocument.title} Tap to Join`,
+      image,
+      metadata: { liveId },
+    }, true)
 
-  await ContentLifecycleNotificationService.publish({
-    eventKey: `live:${liveId}:started`,
-    title: 'Live now',
-    description: `${liveDocument.title} is live now`,
-    category: 'live_channels',
-    route: '/live',
-    type: 'LIVE_EVENT_REMINDER',
-    audience: 'live_channels',
-    metadata: { liveId, contentType: 'live' },
-    photo: liveDocument.coverPhoto,
-  })
+    await ContentLifecycleNotificationService.publish({
+      eventKey: `live:${liveId}:started`,
+      title: 'Live now',
+      description: `${liveDocument.title} is live now`,
+      category: 'live_channels',
+      route: '/live',
+      type: 'LIVE_EVENT_REMINDER',
+      audience: 'live_channels',
+      metadata: { liveId, contentType: 'live' },
+      photo: liveDocument.coverPhoto,
+    })
+  }
 }
 
 export const handleRTMPStreamPublishDone = async (streamKey: unknown) => {
