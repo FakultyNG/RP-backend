@@ -11,7 +11,10 @@ export class WebhooksController {
   })
 
   static googlePlay = Catch.async(async (req, res) => {
-    await StorePurchaseService.reconcileGoogleNotification(req.body?.message?.data)
+    await StorePurchaseService.reconcileGoogleNotification(
+      req.body?.message?.data,
+      req.get('authorization'),
+    )
     res.sendStatus(200)
   })
   static paystack = Catch.async(async (req, res) => {

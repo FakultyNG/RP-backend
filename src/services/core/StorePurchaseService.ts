@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import jwt from 'jsonwebtoken'
-import { GoogleAuth } from 'google-auth-library'
+import { GoogleAuth, OAuth2Client } from 'google-auth-library'
 import env from '../../env'
 import { ContentEntitlementModel } from '../../models/contentEntitlement.model'
 import { SeasonModel } from '../../models/seasons.model'
@@ -192,6 +192,31 @@ export class StorePurchaseService {
       credentials,
       scopes: ['https://www.googleapis.com/auth/androidpublisher'],
     })
+  }
+
+  private static verifyGooglePubSubAuthorization = async (authorization?: string) => {
+    const audience = env.GOOGLE_PUBSUB_AUDIENCE
+    const expectedEmail = env.GOOGLE_PUBSUB_PUSH_SERVICE_ACCOUNT_EMAIL
+    if (!audience && !expectedEmail) return
+    if (!audience || !expectedEmail) {
+      throw new OperationalError('Google Pub/Sub authentication is not fully configured', 503)
+    }
+
+    const match = authorization?.match(/^Bearer\s+(.+)$/i)
+    if (!match?.[1]) throw new OperationalError('Google Pub/Sub authorization is required', 401)
+
+    try {
+      const ticket = await new OAuth2Client().verifyIdToken({
+        idToken: match[1],
+        audience,
+      })
+      const payload = ticket.getPayload()
+      if (!payload?.email_verified || payload.email !== expectedEmail) {
+        throw new Error('Unexpected Pub/Sub push identity')
+      }
+    } catch {
+      throw new OperationalError('Google Pub/Sub authorization is invalid', 401)
+    }
   }
 
   private static verifyGoogle = async (
@@ -394,26 +419,52 @@ export class StorePurchaseService {
     return { revoked: false }
   }
 
-  static reconcileGoogleNotification = async (encodedData: string) => {
+  static reconcileGoogleNotification = async (encodedData: string, authorization?: string) => {
+    await this.verifyGooglePubSubAuthorization(authorization)
     if (!encodedData) throw new OperationalError('Google Pub/Sub data is required', 400)
-    const notification = JSON.parse(Buffer.from(encodedData, 'base64').toString('utf8'))
-    const item = notification.oneTimeProductNotification
-    if (!item?.purchaseToken || !item?.sku) return { ignored: true }
-    const tokenHash = crypto.createHash('sha256').update(item.purchaseToken).digest('hex')
+    let notification: Record<string, any>
+    try {
+      notification = JSON.parse(Buffer.from(encodedData, 'base64').toString('utf8'))
+    } catch {
+      throw new OperationalError('Google Pub/Sub data is invalid', 400)
+    }
+    if (notification.packageName !== env.GOOGLE_PLAY_PACKAGE_NAME) {
+      throw new OperationalError('Google notification belongs to a different app', 403)
+    }
+    if (notification.testNotification) return { ignored: true, test: true }
+
+    const productNotification = notification.oneTimeProductNotification
+    const voidedNotification = notification.voidedPurchaseNotification
+    const purchaseToken = productNotification?.purchaseToken ?? voidedNotification?.purchaseToken
+    const notifiedProductId = productNotification?.sku
+    if (!purchaseToken || (!productNotification && !voidedNotification)) return { ignored: true }
+
+    const tokenHash = crypto.createHash('sha256').update(purchaseToken).digest('hex')
     const purchase = await StorePurchaseModel.findOne({
       provider: 'google',
-      productId: item.sku,
+      ...(notifiedProductId ? { productId: notifiedProductId } : {}),
       purchaseTokenHash: tokenHash,
     }).select('+purchaseTokenHash')
     if (!purchase) return { ignored: true }
+    if (purchase.status === 'revoked') return { revoked: true, duplicate: true }
 
     const accessToken = await this.googleAuth().getAccessToken()
-    const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(env.GOOGLE_PLAY_PACKAGE_NAME)}/purchases/products/${encodeURIComponent(item.sku)}/tokens/${encodeURIComponent(item.purchaseToken)}`
+    const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(env.GOOGLE_PLAY_PACKAGE_NAME)}/purchases/products/${encodeURIComponent(purchase.productId)}/tokens/${encodeURIComponent(purchaseToken)}`
     const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
     if (!response.ok) throw new OperationalError('Google notification could not be verified', 400)
     const state = (await response.json()) as Record<string, any>
-    if (state.purchaseState !== 0 || Number(item.notificationType) === 2) {
-      await this.revokePurchase(purchase, `Google notification ${item.notificationType}`)
+    const storeHasRevokedPurchase = Number(state.purchaseState) !== 0
+    const notificationReportsRevocation =
+      Boolean(voidedNotification) || Number(productNotification?.notificationType) === 2
+
+    if (notificationReportsRevocation && !storeHasRevokedPurchase) {
+      throw new OperationalError('Google Play has not confirmed the revocation yet', 409)
+    }
+    if (storeHasRevokedPurchase) {
+      const reason = voidedNotification
+        ? `Google voided purchase (refund type ${voidedNotification.refundType ?? 'unknown'})`
+        : `Google notification ${productNotification?.notificationType ?? 'unknown'}`
+      await this.revokePurchase(purchase, reason)
       return { revoked: true }
     }
     return { revoked: false }
