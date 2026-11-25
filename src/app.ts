@@ -109,6 +109,39 @@ export const reeplayApp = () => {
     }),
   )
   app.get(
+    '/media/subtitles/:key',
+    Catch.async(async (req, res) => {
+      const key = req.params.key
+      if (!key) throw new OperationalError('Subtitle key is required', 400)
+
+      let subtitle
+      try {
+        subtitle = await S3.getImageObject(key)
+      } catch (error: any) {
+        if (
+          error?.name === 'NoSuchKey' ||
+          error?.name === 'NotFound' ||
+          error?.$metadata?.httpStatusCode === 404
+        ) {
+          throw new OperationalError('Subtitle not found', 404)
+        }
+        throw error
+      }
+
+      if (!subtitle.Body) throw new OperationalError('Subtitle data is unavailable', 404)
+
+      subtitle.ETag && res.setHeader('ETag', subtitle.ETag)
+      subtitle.LastModified &&
+        res.setHeader('Last-Modified', subtitle.LastModified.toUTCString())
+      res.type('text/vtt; charset=utf-8')
+      res.setHeader('X-Content-Type-Options', 'nosniff')
+      res.setHeader('Cache-Control', 'public, max-age=3600')
+
+      const bytes = await subtitle.Body.transformToByteArray()
+      res.send(Buffer.from(bytes))
+    }),
+  )
+  app.get(
     '/media/hls/:token',
     Catch.async(async (req, res) => {
       const manifest = await MediaAccess.getHlsManifest(req.params.token)

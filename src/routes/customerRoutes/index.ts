@@ -51,6 +51,10 @@ customerRouter.get('/pin-reset/:email', OnboardingController.resetPin)
 
 
 customerRouter.use('/ads', AdsRouter)
+// Subtitle metadata is required for free guest playback too. The referenced
+// caption files are read-only public media, so expose this before customer
+// authentication instead of silently removing captions for guest sessions.
+new SharedRoutes(customerRouter).fetchSubtitles()
 customerRouter.post(
   '/analytics/events/anonymous',
   requestValidator(anonymousContentAnalyticsSchema),
@@ -71,7 +75,6 @@ customerRouter.post(
 )
 
 new SharedRoutes(customerRouter)
-  .fetchSubtitles()
   .profile('customer-auth')
   .paymentActions()
   .paymentHistory({ caller: 'Others' })

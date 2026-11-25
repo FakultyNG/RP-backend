@@ -17,6 +17,9 @@ type VideoPlaybackToken = {
 export class MediaAccess {
   static getImageAndSubtitleURL = (key: string) => `${env.CDN_IMAGES_BASE_URL}/${key}`
 
+  static getSubtitleURL = (key: string) =>
+    `${env.PUBLIC_APP_ORIGIN}/media/subtitles/${encodeURIComponent(key)}`
+
   // Kept under the existing method name so API response contracts do not
   // change. Legacy MP4s are read from the Railway S3 bucket rather than the
   // retired CloudFront origin.

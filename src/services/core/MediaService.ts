@@ -185,7 +185,7 @@ export class MediaService {
   }
 
   static getSubtitleUrl = async (_: string, key: string) => {
-    return MediaAccess.getImageAndSubtitleURL(key)
+    return MediaAccess.getSubtitleURL(key)
   }
 
   static getSubtitles = async (parentId: string, type: string) => {
@@ -203,7 +203,8 @@ export class MediaService {
     const subsWithSrcUrls = subtitles.map(subtitle => {
       return {
         ...subtitle.toObject(),
-        src: MediaAccess.getImageAndSubtitleURL(subtitle.key),
+        src: MediaAccess.getSubtitleURL(subtitle.key),
+        format: 'vtt',
       }
     })
 
