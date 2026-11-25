@@ -1,0 +1,10 @@
+{
+  "Rules": [
+    {
+      "ID": "railway-abort-incomplete-multipart-uploads",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "railway-uploads/" },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 1 }
+    }
+  ]
+}

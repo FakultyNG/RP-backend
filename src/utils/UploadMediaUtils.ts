@@ -32,6 +32,8 @@ export type EpisodeReqData = {
   subTitle?: MulterFile
   video?: MulterFile
   trailer?: MulterFile
+  videoUploadId?: string
+  trailerUploadId?: string
 }
 
 export type AddEpisodeInput = {
@@ -73,6 +75,8 @@ export type MovieData = {
   portraitPoster: MulterFile
   trailer?: MulterFile
   video?: MulterFile
+  trailerUploadId?: string
+  videoUploadId?: string
   removeTrailer?: boolean
   removeVideo?: boolean
 }

@@ -1,5 +1,5 @@
 import { Aggregate, FilterQuery, PipelineStage, Types } from 'mongoose'
-import { Video, VideoModel } from '../models/videos.model'
+import { Video, VideoModel, videoTypes } from '../models/videos.model'
 import { skip } from '../utils/QueryParamsFeatures'
 import { SeasonModel } from '../models/seasons.model'
 import { AllVideoTypes } from '../utils/UploadMediaUtils'
@@ -59,6 +59,17 @@ type FetchSimilarByGenreIdInput = {
   vodToExcludeId: unknown
   page: number
   limit: number
+}
+
+type FetchLibraryParams = {
+  page: number
+  limit: number
+  search?: string
+  type?: (typeof videoTypes)[number]
+  access?: 'free' | 'premium' | 'original'
+  genreId?: string
+  categoryId?: string
+  sort?: 'recommended' | 'newest' | 'popular' | 'az'
 }
 
 type FetchRelatedInput = {
@@ -860,6 +871,46 @@ export class VideoRepo {
       page,
       limit,
       sortStage: { $sort: { _id: -1 } },
+    })
+  }
+
+  static fetchLibrary = ({
+    page,
+    limit,
+    search,
+    type,
+    access,
+    genreId,
+    categoryId,
+    sort = 'recommended',
+  }: FetchLibraryParams) => {
+    const match: Record<string, unknown> = {
+      active: true,
+      upcoming: { $ne: true },
+    }
+    if (search) match.title = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' }
+    if (type) match.type = type
+    if (genreId) match.genre = toObjectId(genreId)
+    if (categoryId) match.category = toObjectId(categoryId)
+    if (access === 'original') match.isReeplayOriginal = true
+    if (access === 'free' || access === 'premium') match.vidClass = access
+
+    const sortStage: PipelineStage.Sort = {
+      $sort:
+        sort === 'newest'
+          ? { releaseDate: -1, _id: -1 }
+          : sort === 'popular'
+            ? { viewsCount: -1, engagements: -1, _id: -1 }
+            : sort === 'az'
+              ? { title: 1, _id: 1 }
+              : { engagements: -1, viewsCount: -1, _id: -1 },
+    }
+
+    return this.fetchVideoAggr({
+      prevStages: [{ $match: match }],
+      sortStage,
+      page,
+      limit,
     })
   }
 }

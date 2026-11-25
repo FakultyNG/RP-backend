@@ -11,7 +11,7 @@ import { AuthHeaderKey } from '../../middlewares/auth'
 import { LiveStreamService, CreateLiveData } from '../../services/core/LiveStreamService'
 import { VideoService } from '../../services/core/VideoService'
 import { PaymentService } from '../../services/core/PaymentService'
-import { FilterQuery } from 'mongoose'
+import { FilterQuery, isValidObjectId } from 'mongoose'
 import env from '../../env'
 import { LiveSchema, LiveModel } from '../../models/lives.model'
 import { VideoModel } from '../../models/videos.model'
@@ -129,15 +129,52 @@ export class SharedController extends UploadMediaUtils {
     const { videoQuality } = user
     const splitIds = (value: unknown) =>
       typeof value === 'string' ? value.split(',').filter(Boolean).slice(0, 7) : []
-    const videoDocuments = await PersonalizedContentService.getRecommendations(
-      user,
-      {
-        genreIds: splitIds(req.query.genreIds),
-        categoryIds: splitIds(req.query.categoryIds),
-      },
-      page,
-      limit,
+    const stringQuery = (value: unknown) =>
+      typeof value === 'string' ? value.trim() : ''
+    const search = stringQuery(req.query.search).slice(0, 80)
+    const type = stringQuery(req.query.type)
+    const access = stringQuery(req.query.access)
+    const genreId = stringQuery(req.query.genreId)
+    const categoryId = stringQuery(req.query.categoryId)
+    const sort = stringQuery(req.query.sort)
+    const validTypes = ['movie', 'series', 'music-video', 'skit'] as const
+    const validAccess = ['free', 'premium', 'original'] as const
+    const validSort = ['recommended', 'newest', 'popular', 'az'] as const
+    const hasCatalogueFilters = Boolean(
+      search || type || access || genreId || categoryId || (sort && sort !== 'recommended'),
     )
+
+    if (genreId && !isValidObjectId(genreId)) {
+      throw new OperationalError('Invalid genre filter', 400)
+    }
+    if (categoryId && !isValidObjectId(categoryId)) {
+      throw new OperationalError('Invalid category filter', 400)
+    }
+
+    const videoDocuments = hasCatalogueFilters
+      ? await VideoRepo.fetchLibrary({
+          page,
+          limit,
+          search: search || undefined,
+          type: validTypes.includes(type as any) ? (type as (typeof validTypes)[number]) : undefined,
+          access: validAccess.includes(access as any)
+            ? (access as (typeof validAccess)[number])
+            : undefined,
+          genreId: genreId || undefined,
+          categoryId: categoryId || undefined,
+          sort: validSort.includes(sort as any)
+            ? (sort as (typeof validSort)[number])
+            : 'recommended',
+        })
+      : await PersonalizedContentService.getRecommendations(
+          user,
+          {
+            genreIds: splitIds(req.query.genreIds),
+            categoryIds: splitIds(req.query.categoryIds),
+          },
+          page,
+          limit,
+        )
 
     sendResponse({
       res,

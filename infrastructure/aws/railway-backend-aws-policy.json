@@ -7,7 +7,11 @@
       "Action": [
         "s3:GetBucketLocation",
         "s3:ListBucket",
-        "s3:ListBucketMultipartUploads"
+        "s3:ListBucketMultipartUploads",
+        "s3:GetBucketCORS",
+        "s3:PutBucketCORS",
+        "s3:GetLifecycleConfiguration",
+        "s3:PutLifecycleConfiguration"
       ],
       "Resource": "arn:aws:s3:::reeplay-railway-staging-637423435427"
     },

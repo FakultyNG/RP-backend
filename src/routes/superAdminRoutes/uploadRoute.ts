@@ -4,6 +4,12 @@ import { Multer } from '../../utils/Multer'
 
 export const superAdminUploadsRouter = Router()
 
+superAdminUploadsRouter.post('/multipart/initiate', AdminUploadController.initiateMultipartUpload)
+superAdminUploadsRouter.post('/multipart/:sessionId/parts', AdminUploadController.signMultipartParts)
+superAdminUploadsRouter.get('/multipart/:sessionId', AdminUploadController.multipartUploadStatus)
+superAdminUploadsRouter.post('/multipart/:sessionId/complete', AdminUploadController.completeMultipartUpload)
+superAdminUploadsRouter.delete('/multipart/:sessionId', AdminUploadController.abortMultipartUpload)
+
 superAdminUploadsRouter.get('/fetch/:type', AdminUploadController.fetchVideos)
 superAdminUploadsRouter.get('/status/:id', AdminUploadController.fetchProcessingStatus)
 superAdminUploadsRouter.get('/seasons/fetch/:vidId', AdminUploadController.fetchSeasonsAndEpisodes)

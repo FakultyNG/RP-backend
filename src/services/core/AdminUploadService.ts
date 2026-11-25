@@ -33,6 +33,7 @@ import { VideoUploadModel } from '../../models/videoupload.model'
 import { CronTaskHandlers } from '../../cron/CronTaskHandlers'
 import { ContentLifecycleNotificationService } from './ContentLifecycleNotificationService'
 import { MediaConvert } from '../aws/mediaConvert'
+import { MultipartUploadService } from './MultipartUploadService'
 
 export class AdminUploadService {
   static resolveWithMediaSources = (queryParams: QueryParamsFeaturesOptions['queryParams']) =>
@@ -193,30 +194,42 @@ export class AdminUploadService {
       Key: posterUploads.portraitUpload.Key,
     }
 
-    if (params.data.trailer) {
-      const trailerUpload = await MediaManagement.upload720pAndInitiateMediaConvert(
-        params.data.trailer,
-        expiry,
-      )
-
-      const tVideoUploadDocument = UploadMediaUtils.getVideoUploadDocument(trailerUpload)
-      tVideoUploadDocument.parentId = videoDocument._id
-      tVideoUploadDocument.parentType = 'vod-trailer'
-      await tVideoUploadDocument.save({ session })
+    if (params.data.trailer || params.data.trailerUploadId) {
+      const tVideoUploadDocument = params.data.trailerUploadId
+        ? await MultipartUploadService.claim({
+            videoUploadId: params.data.trailerUploadId,
+            adminId: params.adminId,
+            mediaKind: 'trailer', target: 'vod', parentId: videoDocument._id,
+            parentType: 'vod-trailer', session,
+          })
+        : UploadMediaUtils.getVideoUploadDocument(
+            await MediaManagement.upload720pAndInitiateMediaConvert(params.data.trailer!, expiry),
+          )
+      if (!params.data.trailerUploadId) {
+        tVideoUploadDocument.parentId = videoDocument._id
+        tVideoUploadDocument.parentType = 'vod-trailer'
+        await tVideoUploadDocument.save({ session })
+      }
       videoDocument.isTrailerReady = false
       videoDocument.trailerUpload = tVideoUploadDocument._id
     }
 
-    if (params.data.video) {
-      const videoUpload = await MediaManagement.uploadAndInitiateMediaConvert(
-        params.data.video,
-        expiry,
-      )
-
-      const videoUploploadDocument = UploadMediaUtils.getVideoUploadDocument(videoUpload)
-      videoUploploadDocument.parentId = videoDocument._id
-      videoUploploadDocument.parentType = 'vod'
-      await videoUploploadDocument.save({ session })
+    if (params.data.video || params.data.videoUploadId) {
+      const videoUploploadDocument = params.data.videoUploadId
+        ? await MultipartUploadService.claim({
+            videoUploadId: params.data.videoUploadId,
+            adminId: params.adminId,
+            mediaKind: 'main', target: 'vod', parentId: videoDocument._id,
+            parentType: 'vod', session,
+          })
+        : UploadMediaUtils.getVideoUploadDocument(
+            await MediaManagement.uploadAndInitiateMediaConvert(params.data.video!, expiry),
+          )
+      if (!params.data.videoUploadId) {
+        videoUploploadDocument.parentId = videoDocument._id
+        videoUploploadDocument.parentType = 'vod'
+        await videoUploploadDocument.save({ session })
+      }
       videoDocument.isVideoReady = false
       videoDocument.videoUpload = videoUploploadDocument._id
     }
@@ -313,15 +326,23 @@ export class AdminUploadService {
     if (data.title !== undefined) episode.title = data.title
     if (data.description !== undefined) episode.description = data.description
 
-    if (data.video || data.videoLink) {
+    if (data.video || data.videoUploadId || data.videoLink) {
       if (episode.videoUpload) replacedUploads.push(episode.videoUpload)
 
-      if (data.video) {
-        const upload = await MediaManagement.uploadAndInitiateMediaConvert(data.video)
-        const uploadDocument = UploadMediaUtils.getVideoUploadDocument(upload)
-        uploadDocument.parentId = episode._id
-        uploadDocument.parentType = 'episode'
-        await uploadDocument.save({ session })
+      if (data.video || data.videoUploadId) {
+        const uploadDocument = data.videoUploadId
+          ? await MultipartUploadService.claim({
+              videoUploadId: data.videoUploadId, adminId, mediaKind: 'main', target: 'episode',
+              parentId: episode._id, parentType: 'episode', session,
+            })
+          : UploadMediaUtils.getVideoUploadDocument(
+              await MediaManagement.uploadAndInitiateMediaConvert(data.video!),
+            )
+        if (!data.videoUploadId) {
+          uploadDocument.parentId = episode._id
+          uploadDocument.parentType = 'episode'
+          await uploadDocument.save({ session })
+        }
 
         episode.videoUpload = uploadDocument._id
         episode.videoLink = undefined
@@ -333,15 +354,23 @@ export class AdminUploadService {
       }
     }
 
-    if (data.trailer || data.trailerLink) {
+    if (data.trailer || data.trailerUploadId || data.trailerLink) {
       if (episode.trailerUpload) replacedUploads.push(episode.trailerUpload)
 
-      if (data.trailer) {
-        const upload = await MediaManagement.upload720pAndInitiateMediaConvert(data.trailer)
-        const uploadDocument = UploadMediaUtils.getVideoUploadDocument(upload)
-        uploadDocument.parentId = episode._id
-        uploadDocument.parentType = 'episode-trailer'
-        await uploadDocument.save({ session })
+      if (data.trailer || data.trailerUploadId) {
+        const uploadDocument = data.trailerUploadId
+          ? await MultipartUploadService.claim({
+              videoUploadId: data.trailerUploadId, adminId, mediaKind: 'trailer', target: 'episode',
+              parentId: episode._id, parentType: 'episode-trailer', session,
+            })
+          : UploadMediaUtils.getVideoUploadDocument(
+              await MediaManagement.upload720pAndInitiateMediaConvert(data.trailer!),
+            )
+        if (!data.trailerUploadId) {
+          uploadDocument.parentId = episode._id
+          uploadDocument.parentType = 'episode-trailer'
+          await uploadDocument.save({ session })
+        }
 
         episode.trailerUpload = uploadDocument._id
         episode.trailerLink = undefined
@@ -414,24 +443,40 @@ export class AdminUploadService {
       admin: adminId,
     })
 
-    if (data.trailer) {
-      const trailerUpload = await MediaManagement.upload720pAndInitiateMediaConvert(data.trailer)
-      const videoUploadDocument = UploadMediaUtils.getVideoUploadDocument(trailerUpload)
-      videoUploadDocument.parentId = episodeDocument._id
-      videoUploadDocument.parentType = 'episode-trailer'
+    if (data.trailer || data.trailerUploadId) {
+      const videoUploadDocument = data.trailerUploadId
+        ? await MultipartUploadService.claim({
+            videoUploadId: data.trailerUploadId, adminId, mediaKind: 'trailer', target: 'episode',
+            parentId: episodeDocument._id, parentType: 'episode-trailer', session,
+          })
+        : UploadMediaUtils.getVideoUploadDocument(
+            await MediaManagement.upload720pAndInitiateMediaConvert(data.trailer!),
+          )
+      if (!data.trailerUploadId) {
+        videoUploadDocument.parentId = episodeDocument._id
+        videoUploadDocument.parentType = 'episode-trailer'
+        await videoUploadDocument.save({ session })
+      }
       episodeDocument.trailerUpload = videoUploadDocument._id
       episodeDocument.isTrailerReady = false
-      await videoUploadDocument.save({ session })
     }
 
-    if (data.video) {
-      const videoUpload = await MediaManagement.uploadAndInitiateMediaConvert(data.video)
-      const videoUploadDocument = UploadMediaUtils.getVideoUploadDocument(videoUpload)
-      videoUploadDocument.parentId = episodeDocument._id
-      videoUploadDocument.parentType = 'episode'
+    if (data.video || data.videoUploadId) {
+      const videoUploadDocument = data.videoUploadId
+        ? await MultipartUploadService.claim({
+            videoUploadId: data.videoUploadId, adminId, mediaKind: 'main', target: 'episode',
+            parentId: episodeDocument._id, parentType: 'episode', session,
+          })
+        : UploadMediaUtils.getVideoUploadDocument(
+            await MediaManagement.uploadAndInitiateMediaConvert(data.video!),
+          )
+      if (!data.videoUploadId) {
+        videoUploadDocument.parentId = episodeDocument._id
+        videoUploadDocument.parentType = 'episode'
+        await videoUploadDocument.save({ session })
+      }
       episodeDocument.videoUpload = videoUploadDocument._id
       episodeDocument.isVideoReady = false
-      await videoUploadDocument.save({ session })
     }
 
     // await this._uploadEpisodeVideos({ data, episode }, session)
@@ -439,8 +484,11 @@ export class AdminUploadService {
     return episodeDocument
   }
 
-  static editVideo = async (input: EditVideoParams) =>
-    await withMongoDBSession(this._editVideoSession, input)
+  static editVideo = async (input: EditVideoParams) => {
+    const { video, replacedUploads } = await withMongoDBSession(this._editVideoSession, input)
+    await Promise.allSettled(replacedUploads.map(uploadId => Purge.videoUploadById(uploadId)))
+    return video
+  }
 
   static _editVideoSession = async (
     { data, adminId, videoId }: EditVideoParams,
@@ -452,6 +500,7 @@ export class AdminUploadService {
     if (videoDocument == null) {
       throw new OperationalError('invalid video id', 404)
     }
+    const replacedUploads: StringOrObjectId[] = []
 
     const nextVideoClass = data.vidClass ?? videoDocument.vidClass
     const nextVideoLink = data.videoLink ?? videoDocument.videoLink
@@ -553,28 +602,35 @@ export class AdminUploadService {
 
     if (data.removeVideo) {
       if (videoDocument.videoUpload) {
-        void Purge.videoUploadById(videoDocument.videoUpload)
+        replacedUploads.push(videoDocument.videoUpload)
       }
       videoDocument.videoUpload = undefined
       videoDocument.videoLink = undefined
       videoDocument.isVideoReady = false
-    } else if (data.video) {
-      const videoUpload = await MediaManagement.uploadAndInitiateMediaConvert(data.video, expiry)
-
+    } else if (data.video || data.videoUploadId) {
       if (videoDocument.videoUpload) {
-        Purge.videoUploadById(videoDocument.videoUpload)
+        replacedUploads.push(videoDocument.videoUpload)
       }
 
-      const videoUploadDocument = UploadMediaUtils.getVideoUploadDocument(videoUpload)
-      videoUploadDocument.parentId = videoDocument._id
-      videoUploadDocument.parentType = 'vod'
-      await videoUploadDocument.save({ session })
+      const videoUploadDocument = data.videoUploadId
+        ? await MultipartUploadService.claim({
+            videoUploadId: data.videoUploadId, adminId, mediaKind: 'main', target: 'vod',
+            parentId: videoDocument._id, parentType: 'vod', session,
+          })
+        : UploadMediaUtils.getVideoUploadDocument(
+            await MediaManagement.uploadAndInitiateMediaConvert(data.video!, expiry),
+          )
+      if (!data.videoUploadId) {
+        videoUploadDocument.parentId = videoDocument._id
+        videoUploadDocument.parentType = 'vod'
+        await videoUploadDocument.save({ session })
+      }
       videoDocument.videoUpload = videoUploadDocument._id
       videoDocument.videoLink = undefined
       videoDocument.isVideoReady = false
     } else if (data.videoLink !== undefined) {
       if (videoDocument.videoUpload) {
-        void Purge.videoUploadById(videoDocument.videoUpload)
+        replacedUploads.push(videoDocument.videoUpload)
       }
       videoDocument.videoUpload = undefined
       videoDocument.videoLink = data.videoLink
@@ -583,31 +639,35 @@ export class AdminUploadService {
 
     if (data.removeTrailer) {
       if (videoDocument.trailerUpload) {
-        void Purge.videoUploadById(videoDocument.trailerUpload)
+        replacedUploads.push(videoDocument.trailerUpload)
       }
       videoDocument.trailerUpload = undefined
       videoDocument.trailerLink = undefined
       videoDocument.isTrailerReady = false
-    } else if (data.trailer) {
-      const trailerUpload = await MediaManagement.upload720pAndInitiateMediaConvert(
-        data.trailer,
-        expiry,
-      )
-
+    } else if (data.trailer || data.trailerUploadId) {
       if (videoDocument.trailerUpload) {
-        Purge.videoUploadById(videoDocument.trailerUpload)
+        replacedUploads.push(videoDocument.trailerUpload)
       }
 
-      const videoUploadDocument = UploadMediaUtils.getVideoUploadDocument(trailerUpload)
-      videoUploadDocument.parentId = videoDocument._id
-      videoUploadDocument.parentType = 'vod-trailer'
+      const videoUploadDocument = data.trailerUploadId
+        ? await MultipartUploadService.claim({
+            videoUploadId: data.trailerUploadId, adminId, mediaKind: 'trailer', target: 'vod',
+            parentId: videoDocument._id, parentType: 'vod-trailer', session,
+          })
+        : UploadMediaUtils.getVideoUploadDocument(
+            await MediaManagement.upload720pAndInitiateMediaConvert(data.trailer!, expiry),
+          )
+      if (!data.trailerUploadId) {
+        videoUploadDocument.parentId = videoDocument._id
+        videoUploadDocument.parentType = 'vod-trailer'
+        await videoUploadDocument.save({ session })
+      }
       videoDocument.trailerUpload = videoUploadDocument._id
       videoDocument.trailerLink = undefined
-      await videoUploadDocument.save({ session })
       videoDocument.isTrailerReady = false
     } else if (data.trailerLink !== undefined) {
       if (videoDocument.trailerUpload) {
-        void Purge.videoUploadById(videoDocument.trailerUpload)
+        replacedUploads.push(videoDocument.trailerUpload)
       }
       videoDocument.trailerUpload = undefined
       videoDocument.trailerLink = data.trailerLink
@@ -623,7 +683,7 @@ export class AdminUploadService {
       void MediaManagement.deleteObject(previousLandscapePhoto.Key, previousLandscapePhoto.Bucket)
     }
 
-    return videoDocument
+    return { video: videoDocument, replacedUploads }
   }
 
   static deleteVideo = async (vidId: string, type: AllVideoTypes) => {
@@ -882,6 +942,8 @@ type EpisodeReqData = {
   subTitle?: MulterFile
   video?: MulterFile
   trailer?: MulterFile
+  videoUploadId?: string
+  trailerUploadId?: string
 }
 
 export type AllVideoTypes = Video['type']
@@ -915,6 +977,8 @@ export type MovieData = {
   portraitPoster: MulterFile
   trailer?: MulterFile
   video?: MulterFile
+  trailerUploadId?: string
+  videoUploadId?: string
   removeTrailer?: boolean
   removeVideo?: boolean
 }

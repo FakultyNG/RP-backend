@@ -9,11 +9,70 @@ import {
   HeadObjectCommand,
   ListObjectsCommand,
   ListObjectsV2Command,
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
+  ListPartsCommand,
+  UploadPartCommand,
 } from '@aws-sdk/client-s3'
 import { VideoUploadSchema } from '../../models/videoupload.model'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 export class S3 {
+  static createMultipartUpload = (Key: string, ContentType: string, Bucket = AwsUtils.buckets.reeplay) =>
+    AwsUtils.clients.s3.send(new CreateMultipartUploadCommand({ Bucket, Key, ContentType }))
+
+  static getSignedUploadPartUrl = (
+    Key: string,
+    UploadId: string,
+    PartNumber: number,
+    Bucket = AwsUtils.buckets.reeplay,
+  ) =>
+    getSignedUrl(
+      AwsUtils.clients.s3,
+      new UploadPartCommand({ Bucket, Key, UploadId, PartNumber }),
+      { expiresIn: 3600 },
+    )
+
+  static listMultipartParts = async (
+    Key: string,
+    UploadId: string,
+    Bucket = AwsUtils.buckets.reeplay,
+  ) => {
+    const parts: Array<{ PartNumber: number; ETag: string; Size: number }> = []
+    let PartNumberMarker: string | undefined
+    do {
+      const response = await AwsUtils.clients.s3.send(
+        new ListPartsCommand({ Bucket, Key, UploadId, PartNumberMarker }),
+      )
+      response.Parts?.forEach(part => {
+        if (part.PartNumber && part.ETag) {
+          parts.push({ PartNumber: part.PartNumber, ETag: part.ETag, Size: part.Size ?? 0 })
+        }
+      })
+      PartNumberMarker = response.IsTruncated ? response.NextPartNumberMarker : undefined
+    } while (PartNumberMarker)
+    return parts
+  }
+
+  static completeMultipartUpload = (
+    Key: string,
+    UploadId: string,
+    Parts: Array<{ PartNumber: number; ETag: string }>,
+    Bucket = AwsUtils.buckets.reeplay,
+  ) => AwsUtils.clients.s3.send(
+    new CompleteMultipartUploadCommand({ Bucket, Key, UploadId, MultipartUpload: { Parts } }),
+  )
+
+  static abortMultipartUpload = (
+    Key: string,
+    UploadId: string,
+    Bucket = AwsUtils.buckets.reeplay,
+  ) => AwsUtils.clients.s3.send(new AbortMultipartUploadCommand({ Bucket, Key, UploadId }))
+
+  static headObject = (Key: string, Bucket = AwsUtils.buckets.reeplay) =>
+    AwsUtils.clients.s3.send(new HeadObjectCommand({ Bucket, Key }))
+
   static upload = (params: Options['params']) => {
     return new Upload({ client: AwsUtils.clients.s3, params }).done()
   }

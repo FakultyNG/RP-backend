@@ -10,8 +10,75 @@ import { sendResponse } from '../../utils/responder'
 import { AllVideoTypes, MovieData, UploadMediaUtils } from '../../utils/UploadMediaUtils'
 import { addEpisodeSchema, editEpisodeSchema, editVideoSchema } from '../../validations/admin'
 import { isGuestUser } from '../../utils/guestAccess'
+import { MultipartUploadService } from '../../services/core/MultipartUploadService'
 
 export class AdminUploadController {
+  static initiateMultipartUpload = Catch.async(async ({ body, user }, res) => {
+    const admin = GetDefined.loggedInUser(user)
+    const { fileName, contentType, size, mediaKind, target } = body
+    if (
+      typeof fileName !== 'string' ||
+      typeof contentType !== 'string' ||
+      !Number.isSafeInteger(size) ||
+      !['main', 'trailer'].includes(mediaKind) ||
+      !['vod', 'episode'].includes(target)
+    ) {
+      throw new OperationalError('fileName, contentType, integer size, mediaKind, and target are required', 400)
+    }
+    sendResponse({
+      res,
+      message: 'Multipart upload started',
+      data: await MultipartUploadService.initiate({
+        adminId: admin.id,
+        fileName,
+        contentType,
+        size,
+        mediaKind,
+        target,
+      }),
+    })
+  })
+
+  static signMultipartParts = Catch.async(async ({ params, body, user }, res) => {
+    if (!Array.isArray(body.partNumbers)) {
+      throw new OperationalError('partNumbers must be an array', 400)
+    }
+    sendResponse({
+      res,
+      data: await MultipartUploadService.signParts(
+        params.sessionId,
+        GetDefined.loggedInUser(user).id,
+        body.partNumbers,
+      ),
+    })
+  })
+
+  static multipartUploadStatus = Catch.async(async ({ params, user }, res) => {
+    sendResponse({
+      res,
+      data: await MultipartUploadService.status(
+        params.sessionId,
+        GetDefined.loggedInUser(user).id,
+      ),
+    })
+  })
+
+  static completeMultipartUpload = Catch.async(async ({ params, user }, res) => {
+    sendResponse({
+      res,
+      message: 'Upload completed; HLS processing has started',
+      data: await MultipartUploadService.complete(
+        params.sessionId,
+        GetDefined.loggedInUser(user).id,
+      ),
+    })
+  })
+
+  static abortMultipartUpload = Catch.async(async ({ params, user }, res) => {
+    await MultipartUploadService.abort(params.sessionId, GetDefined.loggedInUser(user).id)
+    sendResponse({ res, message: 'Upload aborted' })
+  })
+
   private static _validateVideoType = (type: string) => {
     if (!videoTypes.includes(type as any)) {
       throw new OperationalError(`Valid video types are ${videoTypes.join(' || ')} `, 400)

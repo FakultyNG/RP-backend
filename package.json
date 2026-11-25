@@ -17,7 +17,8 @@
     "build": "rimraf build && tsc",
     "migrate:railway-hls": "node build/src/migrations/migrateRailwayHls.js",
     "migrate:content-access": "node build/src/migrations/migrateContentAccess.js",
-    "docs:generate": "node scripts/generate-api-docs.mjs"
+    "docs:generate": "node scripts/generate-api-docs.mjs",
+    "configure:s3-multipart": "node scripts/configure-s3-multipart.mjs"
   },
   "keywords": [],
   "author": "",
