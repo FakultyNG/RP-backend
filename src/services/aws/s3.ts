@@ -154,12 +154,19 @@ export class S3 {
     for (let index = 0; index < keys.length; index += 1000) {
       const Objects = keys.slice(index, index + 1000).map(Key => ({ Key }))
       if (!Objects.length) continue
-      await AwsUtils.clients.s3.send(
+      const response = await AwsUtils.clients.s3.send(
         new DeleteObjectsCommand({
           Bucket,
           Delete: { Objects, Quiet: true },
         }),
       )
+
+      if (response.Errors?.length) {
+        const failedKeys = response.Errors.map(error => error.Key)
+          .filter(Boolean)
+          .join(', ')
+        throw new Error(`S3 failed to delete ${response.Errors.length} object(s): ${failedKeys}`)
+      }
     }
   }
 

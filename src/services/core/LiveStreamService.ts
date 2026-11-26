@@ -402,7 +402,9 @@ export class LiveStreamService {
       )
 
       if (liveDocument.previewVideoUpload) {
-        Purge.videoUploadById(liveDocument.previewVideoUpload)
+        void Purge.videoUploadById(liveDocument.previewVideoUpload).catch(error => {
+          console.error('Unable to purge replaced live preview upload', error)
+        })
       }
 
       const videoUploadDocument = UploadMediaUtils.getVideoUploadDocument(vidUpload)

@@ -8,14 +8,16 @@ import { Live } from '../models/lives.model'
 import { PaymentModel } from '../models/payments.model'
 import { MongoDBObjectId } from '../types/general'
 import { StringOrObjectId } from '../types'
+import { MediaConvert } from '../services/aws/mediaConvert'
 
 export class Purge {
-  static live = (live: Live) => {
+  static live = async (live: Live) => {
     const payments: MongoDBObjectId[] = []
 
-    Purge.subtitlesByParentId(live._id)
-
-    live.previewVideoUpload && Purge.videoUploadById(live.previewVideoUpload)
+    await Promise.allSettled([
+      Purge.subtitlesByParentId(live._id),
+      live.previewVideoUpload ? Purge.videoUploadById(live.previewVideoUpload) : Promise.resolve(),
+    ])
     // live.payment_id && payments.push(live.payment_id)
     // live.extpayment_id && payments.push(live.extpayment_id)
 
@@ -28,28 +30,53 @@ export class Purge {
     })
   }
 
-  static videoUploadById = async (vidUploadId: StringOrObjectId) => {
+  private static cancelActiveTranscode = async (jobId?: string | null) => {
+    if (!jobId) return
+
     try {
-      const vidUpload = await VideoUploadModel.findByIdAndDelete(vidUploadId)
-
-      if (vidUpload == null) return
-
-      S3.deleteObject(vidUpload.key, vidUpload.bucket).catch(() => {
-        console.error(
-          `Error deleting vidUpload with Key: ${vidUpload.key} => bucket: ${vidUpload.bucket}`,
-        )
-      })
-
-      vidUpload.resolutions.forEach(res =>
-        S3.deleteObject(res.key, vidUpload.bucket).catch(() => {
-          console.error(
-            `Error deleting video Res with Key: ${res.key} => bucket: ${vidUpload.bucket}`,
-          )
-        }),
-      )
-    } catch (e) {
-      console.error('Error deleting video upload with Id:', vidUploadId)
+      const job = await MediaConvert.getJob(jobId)
+      if (job?.Status === 'SUBMITTED' || job?.Status === 'PROGRESSING') {
+        await MediaConvert.cancelJob(jobId)
+      }
+    } catch (error: any) {
+      const isMissing =
+        error?.name === 'NotFoundException' || error?.$metadata?.httpStatusCode === 404
+      if (!isMissing) throw error
     }
+  }
+
+  private static directoryPrefix = (key?: string | null) => {
+    if (!key?.includes('/')) return null
+    return key.slice(0, key.lastIndexOf('/') + 1)
+  }
+
+  static videoUploadById = async (vidUploadId: StringOrObjectId) => {
+    const vidUpload = await VideoUploadModel.findById(vidUploadId)
+    if (vidUpload == null) return
+
+    // Stop an active job first so MediaConvert cannot recreate output after cleanup.
+    await this.cancelActiveTranscode(vidUpload.hlsJobId)
+
+    const prefixes = new Set<string>([
+      `transcode/${vidUpload.key}`,
+      `${MediaConvert.getHlsPrefix(vidUpload.key)}/`,
+    ])
+    const hlsDirectory = this.directoryPrefix(vidUpload.hlsKey)
+    if (hlsDirectory) prefixes.add(hlsDirectory)
+
+    const prefixedKeys = (
+      await Promise.all([...prefixes].map(prefix => S3.listKeys(prefix, vidUpload.bucket)))
+    ).flat()
+
+    const keys = new Set<string>([
+      vidUpload.key,
+      ...vidUpload.resolutions.map(resolution => resolution.key),
+      ...prefixedKeys,
+    ])
+    if (vidUpload.hlsKey) keys.add(vidUpload.hlsKey)
+
+    await S3.deleteObjects([...keys], vidUpload.bucket)
+    await VideoUploadModel.findByIdAndDelete(vidUploadId)
   }
 
   // static posterById = async (posterId: MongoDBObjectId) => {
@@ -83,64 +110,59 @@ export class Purge {
   // }
 
   static subtitlesByParentId = async (parentId: MongoDBObjectId) => {
-    try {
-      const subtitles = await SubtitleModel.find({ video_id: parentId })
+    const subtitles = await SubtitleModel.find({ video_id: parentId })
 
-      await Promise.all(
-        subtitles.map(async subtitle => {
-          try {
-            await S3.deleteObject(subtitle.key, subtitle.bucket)
-            await SubtitleModel.findByIdAndDelete(subtitle._id)
-          } catch (e) {
-            console.error('Error deleting Subtitle:', subtitle._id)
-          }
-        }),
-      )
-    } catch (e) {
-      console.error('Error deleting subtitles for parent:', parentId)
-    }
+    await Promise.all(
+      subtitles.map(async subtitle => {
+        await S3.deleteObject(subtitle.key, subtitle.bucket)
+        await SubtitleModel.findByIdAndDelete(subtitle._id)
+      }),
+    )
   }
 
   static seasonsByVideoId = async (vodId: MongoDBObjectId) => {
-    try {
-      const seasons = await SeasonModel.find({ video: vodId })
+    const seasons = await SeasonModel.find({ video: vodId })
 
-      await Promise.all(
-        seasons.map(async season => {
-          try {
-            const episodes = await EpisodeModel.find({ season: season._id })
+    await Promise.all(
+      seasons.map(async season => {
+        const episodes = await EpisodeModel.find({ season: season._id })
 
-            await Promise.all(
-              episodes.map(ep =>
-                Promise.allSettled([
-                  ep.videoUpload ? this.videoUploadById(ep.videoUpload) : Promise.resolve(),
-                  ep.trailerUpload ? this.videoUploadById(ep.trailerUpload) : Promise.resolve(),
-                  this.subtitlesByParentId(ep._id),
-                  EpisodeModel.findByIdAndDelete(ep._id),
-                ]),
-              ),
-            )
+        await Promise.all(
+          episodes.map(async episode => {
+            await Promise.all([
+              episode.videoUpload ? this.videoUploadById(episode.videoUpload) : Promise.resolve(),
+              episode.trailerUpload
+                ? this.videoUploadById(episode.trailerUpload)
+                : Promise.resolve(),
+              this.subtitlesByParentId(episode._id),
+            ])
+            await EpisodeModel.findByIdAndDelete(episode._id)
+          }),
+        )
 
-            await SeasonModel.findByIdAndDelete(season._id)
-          } catch (e) {
-            console.error('Error deleting season for VOD:', vodId)
-          }
-        }),
-      )
-    } catch (e) {
-      console.error('Error deleting seasons for series', vodId)
-    }
+        await SeasonModel.findByIdAndDelete(season._id)
+      }),
+    )
   }
 
   static vod = async (videoDocument: Video) => {
-    await Promise.allSettled([
+    await Promise.all([
       this.subtitlesByParentId(videoDocument._id),
-      videoDocument.videoUpload ? this.videoUploadById(videoDocument.videoUpload) : Promise.resolve(),
-      videoDocument.trailerUpload ? this.videoUploadById(videoDocument.trailerUpload) : Promise.resolve(),
+      videoDocument.videoUpload
+        ? this.videoUploadById(videoDocument.videoUpload)
+        : Promise.resolve(),
+      videoDocument.trailerUpload
+        ? this.videoUploadById(videoDocument.trailerUpload)
+        : Promise.resolve(),
     ])
 
     if (videoDocument.type === 'series') {
       await this.seasonsByVideoId(videoDocument._id)
     }
+
+    await Promise.all([
+      S3.deleteObject(videoDocument.portraitPhoto.Key, videoDocument.portraitPhoto.Bucket),
+      S3.deleteObject(videoDocument.landscapePhoto.Key, videoDocument.landscapePhoto.Bucket),
+    ])
   }
 }

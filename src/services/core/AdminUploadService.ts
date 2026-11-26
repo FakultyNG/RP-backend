@@ -389,8 +389,15 @@ export class AdminUploadService {
   }
 
   static deleteEpisode = async (episodeId: string) => {
-    const episode = await EpisodeModel.findByIdAndDelete(episodeId)
+    const episode = await EpisodeModel.findById(episodeId)
     if (episode == null) throw new OperationalError('invalid episode id', 404)
+
+    await Promise.all([
+      Purge.subtitlesByParentId(episode._id),
+      episode.videoUpload ? Purge.videoUploadById(episode.videoUpload) : Promise.resolve(),
+      episode.trailerUpload ? Purge.videoUploadById(episode.trailerUpload) : Promise.resolve(),
+    ])
+    await episode.deleteOne()
 
     const followingEpisodes = await EpisodeModel.find({
       season: episode.season,
@@ -403,12 +410,6 @@ export class AdminUploadService {
       followingEpisode.episodeNumber -= 1
       await followingEpisode.save()
     }
-
-    await Promise.allSettled([
-      Purge.subtitlesByParentId(episode._id),
-      episode.videoUpload ? Purge.videoUploadById(episode.videoUpload) : Promise.resolve(),
-      episode.trailerUpload ? Purge.videoUploadById(episode.trailerUpload) : Promise.resolve(),
-    ])
   }
 
   static deleteSeason = async (seasonId: string) => {
@@ -691,14 +692,14 @@ export class AdminUploadService {
   }
 
   static deleteVideo = async (vidId: string, type: AllVideoTypes) => {
-    const deletedVidocument = await VideoModel.findOneAndDelete({ _id: vidId, type })
+    const videoDocument = await VideoModel.findOne({ _id: vidId, type })
 
-    if (deletedVidocument == null) {
+    if (videoDocument == null) {
       throw new OperationalError(`Not found or video is not a ${type} `, 404)
     }
 
-    // do not await
-    Purge.vod(deletedVidocument)
+    await Purge.vod(videoDocument)
+    await videoDocument.deleteOne()
   }
 
   static getVideos = async (
