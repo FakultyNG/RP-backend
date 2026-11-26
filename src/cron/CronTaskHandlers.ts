@@ -189,6 +189,16 @@ export class CronTaskHandlers {
     }
   }
 
+  /**
+   * Reconcile uploads that completed before a multipart session was attached
+   * to its VOD/episode. Those uploads no longer appear in the untranscoded cron
+   * scan, so their parent readiness flag otherwise remains false forever.
+   */
+  static reconcileReadyUploadParent = async (document: VideoUpload) => {
+    if (!document.isTranscoded) return
+    await this._updateTranscodedDocumentParent(document)
+  }
+
   static expireFeaturedContents = async () => {
     try {
       const dateNow = new Date()

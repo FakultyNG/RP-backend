@@ -887,7 +887,13 @@ export class VideoRepo {
   }: FetchLibraryParams) => {
     const match: Record<string, unknown> = {
       active: true,
-      upcoming: { $ne: true },
+      // `upcoming` is an editorial marker. A title must automatically rejoin
+      // the catalogue once its release instant passes even if that marker has
+      // not yet been cleared by an admin.
+      $or: [
+        { upcoming: { $ne: true } },
+        { releaseDate: { $lte: new Date() } },
+      ],
     }
     if (search) match.title = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' }
     if (type) match.type = type

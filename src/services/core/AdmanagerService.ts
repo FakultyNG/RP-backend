@@ -11,7 +11,6 @@ import { MediaAccess } from '../media-access'
 import { UploadMediaUtils } from '../../utils/UploadMediaUtils'
 import { CategoryEnumService } from './CategoryEnumsService'
 import { CampaignReportService } from './CampaignReportService'
-import { S3 } from '../aws/s3'
 import path from 'node:path'
 
 export interface CreateAdData extends Omit<
@@ -66,7 +65,7 @@ export class AdManagerService {
       const isProgressiveMp4 = ad.videoUpload?.mimetype === 'video/mp4' ||
         ad.videoUpload?.key?.toLowerCase().endsWith('.mp4')
       const videoUrl = ad.videoUpload?.isTranscoded && ad.videoUpload.key && isProgressiveMp4
-        ? await S3.getSignedVideoObjectUrl(ad.videoUpload.key, 86400)
+        ? MediaAccess.getSignedVideoURL(ad.videoUpload.key)
         : undefined
 
       const resolved = Object.assign(ad, {

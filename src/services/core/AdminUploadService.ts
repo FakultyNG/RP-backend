@@ -211,7 +211,10 @@ export class AdminUploadService {
         tVideoUploadDocument.parentType = 'vod-trailer'
         await tVideoUploadDocument.save({ session })
       }
-      videoDocument.isTrailerReady = false
+      // A multipart upload can finish transcoding before the admin attaches it
+      // to the content. Preserve that ready state instead of waiting for a
+      // background worker that only scans untranscoded uploads.
+      videoDocument.isTrailerReady = Boolean(tVideoUploadDocument.isTranscoded)
       videoDocument.trailerUpload = tVideoUploadDocument._id
     }
 
@@ -231,7 +234,7 @@ export class AdminUploadService {
         videoUploploadDocument.parentType = 'vod'
         await videoUploploadDocument.save({ session })
       }
-      videoDocument.isVideoReady = false
+      videoDocument.isVideoReady = Boolean(videoUploploadDocument.isTranscoded)
       videoDocument.videoUpload = videoUploploadDocument._id
     }
 
@@ -348,7 +351,7 @@ export class AdminUploadService {
 
         episode.videoUpload = uploadDocument._id
         episode.videoLink = undefined
-        episode.isVideoReady = false
+        episode.isVideoReady = Boolean(uploadDocument.isTranscoded)
       } else {
         episode.videoUpload = undefined
         episode.videoLink = data.videoLink
@@ -376,7 +379,7 @@ export class AdminUploadService {
 
         episode.trailerUpload = uploadDocument._id
         episode.trailerLink = undefined
-        episode.isTrailerReady = false
+        episode.isTrailerReady = Boolean(uploadDocument.isTranscoded)
       } else {
         episode.trailerUpload = undefined
         episode.trailerLink = data.trailerLink
@@ -462,7 +465,7 @@ export class AdminUploadService {
         await videoUploadDocument.save({ session })
       }
       episodeDocument.trailerUpload = videoUploadDocument._id
-      episodeDocument.isTrailerReady = false
+      episodeDocument.isTrailerReady = Boolean(videoUploadDocument.isTranscoded)
     }
 
     if (data.video || data.videoUploadId) {
@@ -480,7 +483,7 @@ export class AdminUploadService {
         await videoUploadDocument.save({ session })
       }
       episodeDocument.videoUpload = videoUploadDocument._id
-      episodeDocument.isVideoReady = false
+      episodeDocument.isVideoReady = Boolean(videoUploadDocument.isTranscoded)
     }
 
     // await this._uploadEpisodeVideos({ data, episode }, session)
@@ -632,7 +635,7 @@ export class AdminUploadService {
       }
       videoDocument.videoUpload = videoUploadDocument._id
       videoDocument.videoLink = undefined
-      videoDocument.isVideoReady = false
+      videoDocument.isVideoReady = Boolean(videoUploadDocument.isTranscoded)
     } else if (data.videoLink !== undefined) {
       if (videoDocument.videoUpload) {
         replacedUploads.push(videoDocument.videoUpload)
@@ -669,7 +672,7 @@ export class AdminUploadService {
       }
       videoDocument.trailerUpload = videoUploadDocument._id
       videoDocument.trailerLink = undefined
-      videoDocument.isTrailerReady = false
+      videoDocument.isTrailerReady = Boolean(videoUploadDocument.isTranscoded)
     } else if (data.trailerLink !== undefined) {
       if (videoDocument.trailerUpload) {
         replacedUploads.push(videoDocument.trailerUpload)
@@ -806,6 +809,10 @@ export class AdminUploadService {
           progress: 0,
           error: 'Upload record not found',
         }
+      }
+
+      if (upload.isTranscoded && !ready) {
+        await CronTaskHandlers.reconcileReadyUploadParent(upload)
       }
 
       if (live && !upload.isTranscoded && upload.hlsStatus !== 'failed') {
