@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-const productionUrl = 'https://reeplay-api-ts-production.up.railway.app'
+const productionUrl = 'https://api.reeplay.app'
 const apiPrefix = '/api/v1'
 
 const endpoints = []

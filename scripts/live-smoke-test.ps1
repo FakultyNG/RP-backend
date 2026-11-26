@@ -1,6 +1,6 @@
 param(
-  [string]$BaseUrl = 'https://reeplay-api-ts-production.up.railway.app/api/v1',
-  [string]$MediaUrl = 'https://reeplay-media-production.up.railway.app',
+  [string]$BaseUrl = 'https://api.reeplay.app/api/v1',
+  [string]$MediaUrl = 'https://media.reeplay.app',
   [string]$RtmpUrl = 'rtmp://nozomi.proxy.rlwy.net:49887/live',
   [string]$AdminEmail = 'superadmin@reeplay.app',
   [Parameter(Mandatory = $true)][string]$AdminPassword,

@@ -5,22 +5,22 @@ const {
 
 describe('default user profile image', () => {
   const originalConfiguredUrl = process.env.DEFAULT_USER_PROFILE_IMAGE_URL
-  const originalRailwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN
+  const originalPublicMediaOrigin = process.env.PUBLIC_MEDIA_ORIGIN
 
   afterEach(() => {
     if (originalConfiguredUrl === undefined) delete process.env.DEFAULT_USER_PROFILE_IMAGE_URL
     else process.env.DEFAULT_USER_PROFILE_IMAGE_URL = originalConfiguredUrl
 
-    if (originalRailwayDomain === undefined) delete process.env.RAILWAY_PUBLIC_DOMAIN
-    else process.env.RAILWAY_PUBLIC_DOMAIN = originalRailwayDomain
+    if (originalPublicMediaOrigin === undefined) delete process.env.PUBLIC_MEDIA_ORIGIN
+    else process.env.PUBLIC_MEDIA_ORIGIN = originalPublicMediaOrigin
   })
 
-  test('uses the Railway public domain for existing and newly-created accounts', () => {
+  test('uses the branded media origin for existing and newly-created accounts', () => {
     delete process.env.DEFAULT_USER_PROFILE_IMAGE_URL
-    process.env.RAILWAY_PUBLIC_DOMAIN = 'reeplay-api.example.com'
+    process.env.PUBLIC_MEDIA_ORIGIN = 'https://media.example.com'
 
     expect(getDefaultUserProfileImageUrl()).toBe(
-      `https://reeplay-api.example.com${DEFAULT_USER_PROFILE_IMAGE_PATH}`,
+      `https://media.example.com${DEFAULT_USER_PROFILE_IMAGE_PATH}`,
     )
   })
 

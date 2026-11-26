@@ -18,7 +18,7 @@ export class MediaAccess {
   static getImageAndSubtitleURL = (key: string) => `${env.CDN_IMAGES_BASE_URL}/${key}`
 
   static getSubtitleURL = (key: string) =>
-    `${env.PUBLIC_APP_ORIGIN}/media/subtitles/${encodeURIComponent(key)}`
+    `${env.PUBLIC_MEDIA_ORIGIN}/media/subtitles/${encodeURIComponent(key)}`
 
   // Kept under the existing method name so API response contracts do not
   // change. Legacy MP4s are read from the Railway S3 bucket rather than the
@@ -29,7 +29,7 @@ export class MediaAccess {
       env.JWT_SECRET,
       { expiresIn: '1d' },
     )
-    return `${env.PUBLIC_APP_ORIGIN}/media/video/${encodeURIComponent(token)}`
+    return `${env.PUBLIC_MEDIA_ORIGIN}/media/video/${encodeURIComponent(token)}`
   }
 
   static getVideoPlaybackKey = (token: string) => {
@@ -61,7 +61,7 @@ export class MediaAccess {
 
   static getHlsPlaybackURL = (key: string) => {
     const token = this.createHlsToken(key)
-    return `${env.PUBLIC_APP_ORIGIN}/media/hls/${encodeURIComponent(token)}`
+    return `${env.PUBLIC_MEDIA_ORIGIN}/media/hls/${encodeURIComponent(token)}`
   }
 
   private static verifyHlsToken = (token: string): HlsPlaybackToken => {
@@ -105,9 +105,12 @@ export class MediaAccess {
           throw new OperationalError('Invalid HLS child path', 500)
         }
 
+        // Keep every client-visible HLS URL on Reeplay's branded media origin.
+        // The video endpoint supports byte ranges, so it can safely proxy HLS
+        // segments without exposing an S3 hostname or signed AWS query string.
         return childKey.toLowerCase().includes('.m3u8')
           ? this.getHlsPlaybackURL(childKey)
-          : await S3.getSignedVideoObjectUrl(childKey)
+          : this.getSignedVideoURL(childKey)
       }),
     )
 

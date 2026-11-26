@@ -14,6 +14,7 @@ import { OperationalError } from './utils/OperationalError'
 import { S3 } from './services/aws/s3'
 import { MediaAccess } from './services/media-access'
 import { SharePageController } from './controllers/common/sharePage.controller'
+import { AdsController } from './controllers/common/ad.controller'
 import { getBuildInfo } from './utils/buildInfo'
 
 const devTestRoute = (_: Request, res: Response) => {
@@ -55,6 +56,7 @@ export const reeplayApp = () => {
     })
   })
   app.get('/share/:type/:id', Catch.async(SharePageController.render))
+  app.get('/reports/:token', AdsController.publicReport)
   app.get('/.well-known/assetlinks.json', (_, res) => {
     res.setHeader('Cache-Control', 'public, max-age=3600')
     res.json([
@@ -70,6 +72,20 @@ export const reeplayApp = () => {
         },
       },
     ])
+  })
+  app.get('/.well-known/apple-app-site-association', (_, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=3600')
+    res.type('application/json').send({
+      applinks: {
+        apps: [],
+        details: [
+          {
+            appID: 'A8NS2PCJHN.com.reeplayv2',
+            components: [{ '/': '/share/*', comment: 'Reeplay shared content and cast profiles' }],
+          },
+        ],
+      },
+    })
   })
   app.get(
     '/media/images/*',

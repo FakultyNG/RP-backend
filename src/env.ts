@@ -34,6 +34,17 @@ const getValidEnv = <T extends Record<string, any>>(variables: Partial<T>) => {
   return variables as Required<T>
 }
 
+const trimOrigin = (value: string) => value.replace(/\/+$/, '')
+const publicApiOrigin = trimOrigin(
+  process.env.PUBLIC_API_ORIGIN ?? process.env.PUBLIC_APP_ORIGIN ?? 'https://api.reeplay.app',
+)
+const publicShareOrigin = trimOrigin(
+  process.env.PUBLIC_SHARE_ORIGIN ?? 'https://go.reeplay.app',
+)
+const publicMediaOrigin = trimOrigin(
+  process.env.PUBLIC_MEDIA_ORIGIN ?? publicApiOrigin,
+)
+
 export const env = getValidEnv({
   //
   PORT: process.env.PORT,
@@ -41,11 +52,12 @@ export const env = getValidEnv({
   MONGO_DB_NAME: process.env.MONGO_DB_NAME ?? 'reeplayDB',
   NODE_ENV: process.env.NODE_ENV,
   ENABLE_CRON: setToBooleanWithDefault('ENABLE_CRON', false),
-  PUBLIC_APP_ORIGIN:
-    process.env.PUBLIC_APP_ORIGIN ??
-    (process.env.RAILWAY_PUBLIC_DOMAIN
-      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-      : 'https://reeplay-api-ts-production.up.railway.app'),
+  PUBLIC_API_ORIGIN: publicApiOrigin,
+  PUBLIC_SHARE_ORIGIN: publicShareOrigin,
+  PUBLIC_MEDIA_ORIGIN: publicMediaOrigin,
+  // Compatibility alias for code and environments created before the branded
+  // public origins were separated.
+  PUBLIC_APP_ORIGIN: publicApiOrigin,
 
   // emails
   MAIL_SENDER: process.env.MAIL_SENDER,
@@ -73,7 +85,8 @@ export const env = getValidEnv({
   IAM_ROLE_ARN: process.env.IAM_ROLE_ARN,
   RAILWAY_MEDIACONVERT_QUEUE_ARN: process.env.RAILWAY_MEDIACONVERT_QUEUE_ARN ?? '',
   RAILWAY_MEDIACONVERT_JOB_TEMPLATE: process.env.RAILWAY_MEDIACONVERT_JOB_TEMPLATE ?? '',
-  CDN_IMAGES_BASE_URL: process.env.CDN_IMAGES_BASE_URL,
+  CDN_IMAGES_BASE_URL:
+    process.env.CDN_IMAGES_BASE_URL ?? `${publicMediaOrigin}/media/images`,
 
   S3_IMAGE_BUCKET: process.env.S3_IMAGE_BUCKET,
 

@@ -55,7 +55,7 @@ export class CampaignReportService {
   static reportLink(adId: string, version: number) {
     const payload = `${adId}:${version}`
     const signature = createHmac('sha256', env.JWT_SECRET).update(payload).digest('base64url')
-    return `${env.PUBLIC_APP_ORIGIN.replace(/\/$/, '')}/api/v1/ads/report/${adId}.${signature}`
+    return `${env.PUBLIC_SHARE_ORIGIN}/reports/${adId}.${signature}`
   }
 
   static verifyReportToken(token: string) {

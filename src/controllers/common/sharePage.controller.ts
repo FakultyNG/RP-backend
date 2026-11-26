@@ -61,7 +61,7 @@ export class SharePageController {
         ? req.query.vodId
         : ''
     const query = vodId ? `?vodId=${encodeURIComponent(vodId)}` : ''
-    const canonicalUrl = `${env.PUBLIC_APP_ORIGIN}/share/${encodeURIComponent(canonicalType)}/${id}${query}`
+    const canonicalUrl = `${env.PUBLIC_SHARE_ORIGIN}/share/${encodeURIComponent(canonicalType)}/${id}${query}`
     const deepLink = `reeplay://share/${encodeURIComponent(canonicalType)}/${id}${query}`
     const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.reeplayv2'
     const pageTitle = `${title} · Reeplay`

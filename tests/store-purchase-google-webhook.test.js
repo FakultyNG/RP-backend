@@ -143,7 +143,7 @@ describe('Google Play real-time developer notifications', () => {
 
   test('verifies the authenticated Pub/Sub push identity when configured', async () => {
     mockEnv.GOOGLE_PUBSUB_AUDIENCE =
-      'https://reeplay-api-ts-production.up.railway.app/api/v1/webhooks/store/google'
+      'https://api.reeplay.app/api/v1/webhooks/store/google'
     mockEnv.GOOGLE_PUBSUB_PUSH_SERVICE_ACCOUNT_EMAIL =
       'reeplay-pubsub-push@example.iam.gserviceaccount.com'
     mockVerifyIdToken.mockResolvedValue({

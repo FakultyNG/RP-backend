@@ -31,7 +31,7 @@ GOOGLE_MOVIE_PRODUCT_ID=reeplay_ppv_movie_30d
 GOOGLE_SEASON_PRODUCT_ID=reeplay_ppv_season_30d
 GOOGLE_PLAY_PACKAGE_NAME=com.reeplayv2
 GOOGLE_PLAY_SERVICE_ACCOUNT_BASE64=...
-GOOGLE_PUBSUB_AUDIENCE=https://reeplay-api-ts-production.up.railway.app/api/v1/webhooks/store/google
+GOOGLE_PUBSUB_AUDIENCE=https://api.reeplay.app/api/v1/webhooks/store/google
 GOOGLE_PUBSUB_PUSH_SERVICE_ACCOUNT_EMAIL=reeplay-pubsub-push@YOUR_PROJECT_ID.iam.gserviceaccount.com
 ```
 

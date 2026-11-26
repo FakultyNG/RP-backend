@@ -48,8 +48,15 @@ export class ErrorMiddleware {
     }
 
     const isOperationalError = error instanceof OperationalError
-    const message = isOperationalError ? error.message : 'something went wrong please try again'
     const statusCode = isOperationalError ? error.statusCode : 500
+    // Provider SDK failures can contain bucket names, signed URLs, Railway
+    // hostnames, or database addresses. Keep those details in server logs and
+    // never return them in a production 5xx response.
+    const message = statusCode >= 500
+      ? 'Something went wrong. Please try again.'
+      : isOperationalError
+        ? error.message
+        : 'Something went wrong. Please try again.'
     statusCode.toString().startsWith('5') || !isOperationalError  && console.log('Express Error middleware Middleware🛑', error)
 
     sendResponse({
