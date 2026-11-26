@@ -164,6 +164,47 @@ export class MultipartUploadService {
     }
   }
 
+  static cleanupAbandoned = async () => {
+    // Run shortly before Mongo's TTL cleanup so S3 multipart parts and
+    // unclaimed completed uploads are removed instead of becoming orphans.
+    const sessions = await MultipartUploadModel.find({
+      claimedAt: null,
+      expiresAt: { $lte: new Date(Date.now() + 15 * 60 * 1000) },
+      status: { $in: ['active', 'uploaded', 'completed', 'aborted'] },
+    }).limit(100)
+
+    let cleaned = 0
+    for (const session of sessions) {
+      try {
+        if (session.status === 'active') {
+          await S3.abortMultipartUpload(session.key, session.uploadId, session.bucket).catch(() => undefined)
+        }
+        if (session.status === 'uploaded') {
+          await S3.deleteObject(session.key, session.bucket).catch(() => undefined)
+        }
+        if (session.status === 'completed' && session.videoUploadId) {
+          const upload = await VideoUploadModel.findById(session.videoUploadId)
+          if (upload) {
+            if (upload.hlsJobId && upload.hlsStatus === 'processing') {
+              await MediaConvert.cancelJob(upload.hlsJobId).catch(() => undefined)
+            }
+            const [legacyKeys, hlsKeys] = await Promise.all([
+              S3.listKeys(`transcode/${upload.key}`),
+              S3.listKeys(`railway-hls/${upload.key}/`),
+            ])
+            await S3.deleteObjects([...new Set([upload.key, ...legacyKeys, ...hlsKeys])], upload.bucket)
+            await upload.deleteOne()
+          }
+        }
+        await session.deleteOne()
+        cleaned += 1
+      } catch (error: any) {
+        console.error('Could not clean abandoned multipart upload', session._id, error?.message ?? error)
+      }
+    }
+    return cleaned
+  }
+
   static claim = async ({
     videoUploadId,
     adminId,

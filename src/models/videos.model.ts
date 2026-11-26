@@ -162,6 +162,12 @@ const schema = new Schema(
       default: true,
     },
 
+    draft: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
     showViews: {
       type: Boolean,
       default: true,

@@ -3,6 +3,7 @@ import moment from 'moment'
 import {
   CreateJobCommand,
   CreateJobCommandInput,
+  CancelJobCommand,
   GetJobCommand,
   ListJobsCommand,
   Output,
@@ -118,6 +119,9 @@ const createHlsOutput = ({ width, height, maxBitrate, nameModifier }: HlsRenditi
 })
 
 export class MediaConvert {
+  static cancelJob = (jobId: string) =>
+    AwsUtils.clients.mediaConvert.send(new CancelJobCommand({ Id: jobId }))
+
   private static _extractKey = (pathLike: string) => {
     const prefix = `s3://${AwsUtils.buckets.reeplay}/`
     return pathLike.startsWith(prefix) ? pathLike.slice(prefix.length) : pathLike

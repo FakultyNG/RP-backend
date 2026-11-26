@@ -23,9 +23,15 @@ export const addEpisodeSchema = Joi.object({
   trailer: Joi.object().optional(), // file
   videoUploadId: MONGO_DB_OBJECT_ID_SCHEMA.optional(),
   trailerUploadId: MONGO_DB_OBJECT_ID_SCHEMA.optional(),
+  draft: Joi.boolean().default(false),
 })
   .oxor('trailerLink', 'trailer', 'trailerUploadId')
-  .xor('video', 'videoLink', 'videoUploadId')
+  .oxor('video', 'videoLink', 'videoUploadId')
+  .custom((value, helpers) =>
+    value.draft || value.video || value.videoLink || value.videoUploadId
+      ? value
+      : helpers.message({ custom: 'A video is required unless the episode is saved as a draft' }),
+  )
 
 export const editEpisodeSchema = Joi.object({
   title: STRING_SCHEMA,
@@ -36,10 +42,11 @@ export const editEpisodeSchema = Joi.object({
   trailer: Joi.object(),
   videoUploadId: MONGO_DB_OBJECT_ID_SCHEMA,
   trailerUploadId: MONGO_DB_OBJECT_ID_SCHEMA,
+  draft: Joi.boolean(),
 })
   .oxor('trailerLink', 'trailer', 'trailerUploadId')
   .oxor('video', 'videoLink', 'videoUploadId')
-  .or('title', 'description', 'videoLink', 'trailerLink', 'video', 'trailer', 'videoUploadId', 'trailerUploadId')
+  .or('title', 'description', 'videoLink', 'trailerLink', 'video', 'trailer', 'videoUploadId', 'trailerUploadId', 'draft')
 
 export const addMovieOrSkitSchema = Joi.object({
   title: STRING_SCHEMA.required(),
@@ -73,12 +80,20 @@ export const addMovieOrSkitSchema = Joi.object({
   videoLink: STRING_SCHEMA.optional(),
   vidClass: VIDEO_CLASS_SCHEMA.required(),
   isReeplayOriginal: Joi.boolean(),
+  draft: Joi.boolean().default(false),
 
   expiryDate: ISO_STRING_SCHEMA,
 
 })
-  .xor('trailerLink', 'trailer', 'trailerUploadId')
-  .xor('video', 'videoLink', 'videoUploadId')
+  .oxor('trailerLink', 'trailer', 'trailerUploadId')
+  .oxor('video', 'videoLink', 'videoUploadId')
+  .custom((value, helpers) =>
+    value.draft ||
+    ((value.video || value.videoLink || value.videoUploadId) &&
+      (value.trailer || value.trailerLink || value.trailerUploadId))
+      ? value
+      : helpers.message({ custom: 'Main video and trailer are required unless saved as a draft' }),
+  )
 
 export const addSeriesSchema = Joi.object({
   title: STRING_SCHEMA.required(),
@@ -142,10 +157,18 @@ export const addMusicVideoSchema = Joi.object({
   trailerLink: STRING_SCHEMA.optional(), // file
   trailer: Joi.object().optional(),
   trailerUploadId: MONGO_DB_OBJECT_ID_SCHEMA.optional(),
+  draft: Joi.boolean().default(false),
 
 })
-  .xor('trailerLink', 'trailer', 'trailerUploadId')
-  .xor('video', 'videoLink', 'videoUploadId')
+  .oxor('trailerLink', 'trailer', 'trailerUploadId')
+  .oxor('video', 'videoLink', 'videoUploadId')
+  .custom((value, helpers) =>
+    value.draft ||
+    ((value.video || value.videoLink || value.videoUploadId) &&
+      (value.trailer || value.trailerLink || value.trailerUploadId))
+      ? value
+      : helpers.message({ custom: 'Main video and trailer are required unless saved as a draft' }),
+  )
 
 export const editVideoSchema = Joi.object({
   title: STRING_SCHEMA,
@@ -177,6 +200,7 @@ export const editVideoSchema = Joi.object({
   active: Joi.boolean(),
   upcoming: Joi.boolean(),
   showViews: Joi.boolean(),
+  draft: Joi.boolean(),
 
   trailerLink: STRING_SCHEMA, // file
   trailer: Joi.object(),

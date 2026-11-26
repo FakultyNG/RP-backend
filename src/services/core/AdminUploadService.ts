@@ -155,7 +155,8 @@ export class AdminUploadService {
       videoLink: data.videoLink,
       trailerLink: data.trailerLink,
       runtime: data.runtime,
-      active: data.active,
+      active: data.draft ? false : data.active,
+      draft: Boolean(data.draft),
       showViews: data.showViews,
     })
 
@@ -243,7 +244,7 @@ export class AdminUploadService {
     const releaseDate = video.releaseDate ? new Date(video.releaseDate) : null
     const isUpcoming = Boolean(releaseDate && releaseDate.getTime() > Date.now())
 
-    if (isUpcoming) {
+    if (!video.draft && isUpcoming) {
       await ContentLifecycleNotificationService.publish({
         eventKey: `vod:${video._id}:upcoming`,
         title: 'New upcoming title',
@@ -255,7 +256,7 @@ export class AdminUploadService {
         metadata: { contentId: video._id.toString(), contentType: 'vod' },
         photo: video.landscapePhoto,
       })
-    } else if (video.videoLink) {
+    } else if (!video.draft && video.videoLink) {
       await ContentLifecycleNotificationService.publish({
         eventKey: `vod:${video._id}:new-arrival`,
         title: 'New arrival',
@@ -325,6 +326,7 @@ export class AdminUploadService {
     episode.admin = adminId as any
     if (data.title !== undefined) episode.title = data.title
     if (data.description !== undefined) episode.description = data.description
+    if (data.draft !== undefined) episode.draft = data.draft
 
     if (data.video || data.videoUploadId || data.videoLink) {
       if (episode.videoUpload) replacedUploads.push(episode.videoUpload)
@@ -441,6 +443,7 @@ export class AdminUploadService {
       videoLink: data.videoLink,
       season: seasonId,
       admin: adminId,
+      draft: Boolean(data.draft),
     })
 
     if (data.trailer || data.trailerUploadId) {
@@ -571,6 +574,7 @@ export class AdminUploadService {
 
     if (data.runtime !== undefined) videoDocument.runtime = data.runtime
     if (data.active !== undefined) videoDocument.active = data.active
+    if (data.draft !== undefined) videoDocument.draft = data.draft
     if (data.showViews !== undefined) videoDocument.showViews = data.showViews
     if (data.portraitPoster) {
       const potraitUpload = await MediaManagement.storeImageAndSubtitle(
@@ -770,7 +774,7 @@ export class AdminUploadService {
 
   static getContentProcessingStatus = async (videoId: string, live = true) => {
     const video = await VideoModel.findById(videoId).select(
-      'title type active releaseDate expiryDate isVideoReady isTrailerReady videoUpload trailerUpload videoLink trailerLink',
+      'title type active draft releaseDate expiryDate isVideoReady isTrailerReady videoUpload trailerUpload videoLink trailerLink',
     )
     if (video == null) throw new OperationalError('Content not found', 404)
 
@@ -890,8 +894,10 @@ export class AdminUploadService {
     const now = new Date()
     const released = !video.releaseDate || video.releaseDate <= now
     const unexpired = !video.expiryDate || video.expiryDate > now
-    const published = Boolean(video.active && released && unexpired && mediaReady)
-    const state = hasProcessing
+    const published = Boolean(!video.draft && video.active && released && unexpired && mediaReady)
+    const state = video.draft && !hasProcessing
+      ? 'draft'
+      : hasProcessing
       ? 'processing'
       : hasFailure
         ? 'failed'
@@ -908,6 +914,8 @@ export class AdminUploadService {
       published,
       publicationReason: published
         ? 'Published in the app'
+        : video.draft
+          ? 'Saved as a draft'
         : !mediaReady
           ? 'Waiting for required media'
           : !video.active
@@ -944,6 +952,7 @@ type EpisodeReqData = {
   trailer?: MulterFile
   videoUploadId?: string
   trailerUploadId?: string
+  draft?: boolean
 }
 
 export type AllVideoTypes = Video['type']
@@ -981,6 +990,7 @@ export type MovieData = {
   videoUploadId?: string
   removeTrailer?: boolean
   removeVideo?: boolean
+  draft?: boolean
 }
 
 export type AddSeasonParams = {

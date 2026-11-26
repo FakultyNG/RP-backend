@@ -334,6 +334,7 @@ export class VideoRepo {
                   {
                     $match: {
                       isVideoReady: true,
+                      draft: { $ne: true },
                     },
                   },
                 ]),
@@ -449,7 +450,7 @@ export class VideoRepo {
               foreignField: 'season',
               as: '_readyEpisodes',
               pipeline: [
-                { $match: { isVideoReady: true } },
+                { $match: { isVideoReady: true, draft: { $ne: true } } },
                 { $limit: 1 },
                 { $project: { _id: true } },
               ],
@@ -458,8 +459,8 @@ export class VideoRepo {
           {
             $match: {
               $or: [
-                { type: { $ne: 'series' }, isVideoReady: true, isTrailerReady: true },
-                { type: 'series', '_readyEpisodes.0': { $exists: true } },
+                { type: { $ne: 'series' }, draft: { $ne: true }, isVideoReady: true, isTrailerReady: true },
+                { type: 'series', draft: { $ne: true }, '_readyEpisodes.0': { $exists: true } },
               ],
             },
           },

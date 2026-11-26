@@ -22,8 +22,16 @@ import { AdManagerService } from '../services/core/AdmanagerService'
 import { CampaignReportService } from '../services/core/CampaignReportService'
 import { ContentLifecycleNotificationService } from '../services/core/ContentLifecycleNotificationService'
 import { PlatformSettingsService } from '../services/core/PlatformSettingsService'
+import { MultipartUploadService } from '../services/core/MultipartUploadService'
 
 export class CronTaskHandlers {
+  static cleanupAbandonedMultipartUploads = async () => {
+    try {
+      await MultipartUploadService.cleanupAbandoned()
+    } catch (error: any) {
+      console.error('Cron Error: cleanup abandoned multipart uploads', error?.message ?? error)
+    }
+  }
   protected static checkTranscodedParentDocumentOrThrow = (
     parentDocument: unknown | null,
     documentId: StringOrObjectId,
@@ -52,6 +60,8 @@ export class CronTaskHandlers {
 
         if (
           readyVideo &&
+          !readyVideo.draft &&
+          readyVideo.active &&
           (!readyVideo.releaseDate || readyVideo.releaseDate.getTime() <= Date.now())
         ) {
           await ContentLifecycleNotificationService.publish({
@@ -84,7 +94,7 @@ export class CronTaskHandlers {
             isVideoReady: true,
           }, { new: true })
         this.checkTranscodedParentDocumentOrThrow(readyEpisode, videoUploadDocumentId)
-        if (readyEpisode) {
+        if (readyEpisode && !readyEpisode.draft) {
           await ContentLifecycleNotificationService.publish({
             eventKey: `episode:${readyEpisode._id}:new-arrival`,
             title: 'New episode available',
