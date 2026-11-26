@@ -6,11 +6,13 @@ import { MulterFile } from '../../types'
 import { MediaManagement } from '../media-management'
 import { MaybeSession, withMongoDBSession } from '../../utils/mongoDbSessionRunner'
 import { Purge } from '../../utils/Purge'
-import { VideoQuality, VidUploadUtils } from '../../utils/VideoUploadUtils'
+import { VideoQuality } from '../../utils/VideoUploadUtils'
 import { MediaAccess } from '../media-access'
 import { UploadMediaUtils } from '../../utils/UploadMediaUtils'
 import { CategoryEnumService } from './CategoryEnumsService'
 import { CampaignReportService } from './CampaignReportService'
+import { S3 } from '../aws/s3'
+import path from 'node:path'
 
 export interface CreateAdData extends Omit<
   AdSchema,
@@ -54,16 +56,17 @@ interface UploadMediaInput {
 }
 
 export class AdManagerService {
-  protected static _resolveMediaSources = (
+  protected static _resolveMediaSources = async (
     ads: FetchAdResult[],
-    quality?: VideoQuality,
     includeReporting = false,
   ) => {
-    return ads.map(ad => {
+    return await Promise.all(ads.map(async ad => {
       const photoUrl = MediaAccess.getImageAndSubtitleURL(ad.photo.Key)
       const hasVideo = Boolean(ad.videoUpload)
-      const videoUrl = ad.videoUpload?.isTranscoded
-        ? VidUploadUtils.getResSourceUrl(ad.videoUpload, quality ?? '720p')
+      const isProgressiveMp4 = ad.videoUpload?.mimetype === 'video/mp4' ||
+        ad.videoUpload?.key?.toLowerCase().endsWith('.mp4')
+      const videoUrl = ad.videoUpload?.isTranscoded && ad.videoUpload.key && isProgressiveMp4
+        ? await S3.getSignedVideoObjectUrl(ad.videoUpload.key, 86400)
         : undefined
 
       const resolved = Object.assign(ad, {
@@ -92,13 +95,23 @@ export class AdManagerService {
         nextReportAt: undefined,
         lastReportAt: undefined,
       })
-    })
+    }))
+  }
+
+  protected static _validateProgressiveVideo = (file: MulterFile) => {
+    if (path.extname(file.originalname).toLowerCase() !== '.mp4' || file.mimetype !== 'video/mp4') {
+      throw new OperationalError('Welcome/auth ad video must be an MP4 file', 400)
+    }
+    if (file.size > 100 * 1024 * 1024) {
+      throw new OperationalError('Welcome/auth ad video must be 100 MB or smaller', 400)
+    }
   }
 
   protected static _uploadMedia = async ({ videoFile, imageFile, expire }: UploadMediaInput) => {
+    this._validateProgressiveVideo(videoFile)
     const [imageUploadResult, videoUploadResult] = await Promise.allSettled([
       MediaManagement.storeImageAndSubtitle(imageFile, expire, 'landscape-poster'),
-      MediaManagement.upload720pAndInitiateMediaConvert(videoFile, expire),
+      MediaManagement.uploadProgressiveVideo(videoFile, expire),
     ])
 
     if (imageUploadResult.status === 'rejected') {
@@ -235,6 +248,7 @@ export class AdManagerService {
         Bucket: imageUpload.Bucket,
         Key: imageUpload.Key,
       },
+      isVideoReady: true,
     })
 
     const videoUploadDocument = UploadMediaUtils.getVideoUploadDocument(videoUpload)
@@ -278,7 +292,8 @@ export class AdManagerService {
     }
 
     if (data.videoFile) {
-      const uploadedVideo = await MediaManagement.upload720pAndInitiateMediaConvert(
+      this._validateProgressiveVideo(data.videoFile)
+      const uploadedVideo = await MediaManagement.uploadProgressiveVideo(
         data.videoFile,
         expireAt,
       )
@@ -301,7 +316,7 @@ export class AdManagerService {
       active: data.active,
       photo: replacementPhoto,
       videoUpload: replacementVideoUpload,
-      isVideoReady: data.videoFile ? false : ad.isVideoReady,
+      isVideoReady: data.videoFile ? true : ad.isVideoReady,
       advertiserEmails,
       reportDelivery,
       reportFrequency,
@@ -328,7 +343,7 @@ export class AdManagerService {
     return ad
   }
 
-  static getMany = async (videoQuality: VideoQuality, query: ExpressRequestQuery) => {
+  static getMany = async (_videoQuality: VideoQuality, query: ExpressRequestQuery) => {
     await this.deleteExpiredAds()
     const { skip, limit } = QueryParamsFeatures.paginagteParams(query)
 
@@ -338,12 +353,12 @@ export class AdManagerService {
       type: query.type,
     })
 
-    return this._resolveMediaSources(ads, videoQuality, true)
+    return await this._resolveMediaSources(ads, true)
   }
 
-  static getRandom = async (videoQuality: VideoQuality, type: unknown) => {
+  static getRandom = async (_videoQuality: VideoQuality, type: unknown) => {
     const ads = await AdManagerRepo.fetcRandom(type)
-    return this._resolveMediaSources(ads, videoQuality)
+    return await this._resolveMediaSources(ads)
   }
 
   protected static _deleteMedia = async (ad: AdSchema) => {

@@ -56,6 +56,18 @@ export class MediaManagement {
   static upload720pAndInitiateMediaConvert = async (file: MulterFile, expire?: Date) =>
     this.uploadAndInitiateMediaConvert(file, expire, MediaConvert.transcode720p)
 
+  /** Progressive MP4 path for short auth/welcome ads; no MediaConvert job is created. */
+  static uploadProgressiveVideo = async (file: MulterFile, expire?: Date) => {
+    const upload = await this._storeObjectFile(file, AwsUtils.buckets.reeplay, expire)
+    return {
+      ...upload,
+      isTranscoded: true,
+      hlsStatus: 'ready' as const,
+      hlsJobId: null,
+      hlsKey: null,
+    }
+  }
+
   static storeNotificationSound = (file: MulterFile) =>
     this._storeObjectFile(file, AwsUtils.buckets.replayImages)
 

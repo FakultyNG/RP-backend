@@ -16,6 +16,7 @@
     "start": "cross-env NODE_ENV=production node build/src/index.js",
     "build": "rimraf build && tsc",
     "migrate:railway-hls": "node build/src/migrations/migrateRailwayHls.js",
+    "cleanup:legacy-mp4-welcome-ads": "node build/src/migrations/cleanupLegacyMp4AndWelcomeAds.js",
     "migrate:content-access": "node build/src/migrations/migrateContentAccess.js",
     "docs:generate": "node scripts/generate-api-docs.mjs",
     "configure:s3-multipart": "node scripts/configure-s3-multipart.mjs"

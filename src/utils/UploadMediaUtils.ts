@@ -180,6 +180,7 @@ export class UploadMediaUtils {
 
   static getVideoUploadDocument = (
     upload: StoreResponse & {
+      isTranscoded?: boolean
       hlsStatus?: 'pending' | 'processing' | 'ready' | 'failed'
       hlsJobId?: string | null
       hlsKey?: string | null
@@ -190,7 +191,7 @@ export class UploadMediaUtils {
       key: upload.Key,
       mimetype: upload.mimetype,
       size: upload.size,
-      isTranscoded: false,
+      isTranscoded: upload.isTranscoded ?? false,
       hlsStatus: upload.hlsStatus ?? 'pending',
       hlsJobId: upload.hlsJobId ?? null,
       hlsKey: upload.hlsKey ?? null,
