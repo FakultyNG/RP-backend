@@ -12,6 +12,7 @@ import { NotificationRepo } from '../../repositories/NotificationRepo'
 import { SettingsModel } from '../../models/userSettings.model'
 import { Notification, NotificationAudience } from '../../notifications/notification'
 import { PlatformSettingsService } from './PlatformSettingsService'
+import { isValidObjectId } from 'mongoose'
 
 interface GetNotificationsInput {
   currentUser: LoggedInUser
@@ -248,6 +249,35 @@ export class NotificationService {
     if (notification == null) {
       throw new OperationalError('Notfication not found', 404)
     }
+  }
+
+  static markAllUserNotificationsSeen = async (currentUser: LoggedInUser) => {
+    const result = await UserNotificationModel.updateMany(
+      { user: currentUser._id, hasSeen: false },
+      { $set: { hasSeen: true } },
+    )
+    return result.modifiedCount
+  }
+
+  static deleteUserNotification = async (
+    currentUser: LoggedInUser,
+    notificationId: string,
+  ) => {
+    if (!isValidObjectId(notificationId)) {
+      throw new OperationalError('Notification not found', 404)
+    }
+    const notification = await UserNotificationModel.findOneAndDelete({
+      _id: notificationId,
+      user: currentUser._id,
+    })
+    if (notification == null) {
+      throw new OperationalError('Notification not found', 404)
+    }
+  }
+
+  static clearUserNotifications = async (currentUser: LoggedInUser) => {
+    const result = await UserNotificationModel.deleteMany({ user: currentUser._id })
+    return result.deletedCount
   }
 
   // OLD

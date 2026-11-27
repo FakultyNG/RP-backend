@@ -102,4 +102,34 @@ export class NotificationController {
       res,
     })
   })
+
+  static markAllNotificationsSeen = Catch.async(async (req, res) => {
+    const updated = await NotificationService.markAllUserNotificationsSeen(
+      GetDefined.loggedInUser(req.user),
+    )
+    sendResponse({
+      res,
+      data: { updated },
+      message: 'All notifications marked as read',
+    })
+  })
+
+  static deleteNotification = Catch.async(async (req, res) => {
+    await NotificationService.deleteUserNotification(
+      GetDefined.loggedInUser(req.user),
+      req.params.notificationId,
+    )
+    sendResponse({ res, message: 'Notification deleted' })
+  })
+
+  static clearNotifications = Catch.async(async (req, res) => {
+    const deleted = await NotificationService.clearUserNotifications(
+      GetDefined.loggedInUser(req.user),
+    )
+    sendResponse({
+      res,
+      data: { deleted },
+      message: 'Notifications cleared',
+    })
+  })
 }

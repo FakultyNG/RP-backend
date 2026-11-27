@@ -4,6 +4,9 @@ import { NotificationController } from '../../controllers/common/notification.co
 export const notificationRouter = Router()
 
 notificationRouter.get('/unread-count', NotificationController.getUnreadCount)
+notificationRouter.put('/mark-all-read', NotificationController.markAllNotificationsSeen)
+notificationRouter.delete('/clear', NotificationController.clearNotifications)
+notificationRouter.delete('/:notificationId', NotificationController.deleteNotification)
 
 notificationRouter
   .route('/')
