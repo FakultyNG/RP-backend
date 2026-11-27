@@ -8,6 +8,7 @@ import env from '../env'
 import { MaybeSession } from '../utils/mongoDbSessionRunner'
 import { StringOrObjectId } from '../types'
 import { buildTitleRelevanceStage } from '../utils/SearchRelevance'
+import { CategoryEnumModel } from '../models/categoryEnum.model'
 
 export const toObjectId = (val: string) => new Types.ObjectId(val)
 
@@ -86,6 +87,26 @@ type ComputeTotalEngagementsInput = {
 }
 
 export class VideoRepo {
+  private static musicVideoScope = { type: { $ne: 'music-video' } }
+
+  private static categoryMusicVideoScope = async (categoryId: string) => {
+    const category = await CategoryEnumModel.findById(categoryId).select('name').lean()
+    const isMusicVideoCategory = /music/i.test(category?.name ?? '')
+    return isMusicVideoCategory
+      ? { type: 'music-video' }
+      : this.musicVideoScope
+  }
+
+  private static contextualMusicVideoScope = async (vodId: unknown) => {
+    if (typeof vodId !== 'string' || !Types.ObjectId.isValid(vodId)) {
+      return this.musicVideoScope
+    }
+    const source = await VideoModel.findById(vodId).select('type').lean()
+    return source?.type === 'music-video'
+      ? { type: 'music-video' }
+      : this.musicVideoScope
+  }
+
   static computeEngagements = async ({
     session,
     id,
@@ -240,7 +261,8 @@ export class VideoRepo {
       prevStages: [
         {
           $match: {
-            releaseDate: { $gt: new Date() }
+            releaseDate: { $gt: new Date() },
+            ...this.musicVideoScope,
           },
         },
       ],
@@ -257,7 +279,7 @@ export class VideoRepo {
     this.fetchVideoAggr({
       prevStages: [
         {
-          $match: {},
+          $match: this.musicVideoScope,
         },
       ],
 
@@ -274,6 +296,7 @@ export class VideoRepo {
           $match: {
             releaseDate: { $gt: new Date() },
             active: true,
+            ...this.musicVideoScope,
           },
         },
       ],
@@ -608,7 +631,10 @@ export class VideoRepo {
     page,
     limit,
   }: FetchSimilarByCastIdInput) => {
-    const match: PipelineStage.Match = { $match: { cast: toObjectId(castId) } }
+    const musicVideoScope = await this.contextualMusicVideoScope(vodToExcludeId)
+    const match: PipelineStage.Match = {
+      $match: { cast: toObjectId(castId), ...musicVideoScope },
+    }
 
     if (typeof vodToExcludeId === 'string') {
       match.$match._id = { $ne: toObjectId(vodToExcludeId) }
@@ -622,13 +648,16 @@ export class VideoRepo {
     })
   }
 
-  static fetchSimilarByGenreId = ({
+  static fetchSimilarByGenreId = async ({
     genreId,
     vodToExcludeId,
     page,
     limit,
   }: FetchSimilarByGenreIdInput) => {
-    const match: PipelineStage.Match = { $match: { genre: toObjectId(genreId) } }
+    const musicVideoScope = await this.contextualMusicVideoScope(vodToExcludeId)
+    const match: PipelineStage.Match = {
+      $match: { genre: toObjectId(genreId), ...musicVideoScope },
+    }
 
     if (typeof vodToExcludeId === 'string') {
       match.$match._id = { $ne: toObjectId(vodToExcludeId) }
@@ -731,8 +760,9 @@ export class VideoRepo {
   }
 
   static fetchByCategory = async (catId: string, page: number, limit: number) => {
+    const musicVideoScope = await this.categoryMusicVideoScope(catId)
     return await this.fetchVideoAggr({
-      prevStages: [{ $match: { category: toObjectId(catId) } }],
+      prevStages: [{ $match: { category: toObjectId(catId), ...musicVideoScope } }],
       page,
       limit,
       sortStage: { $sort: { _id: -1 } },
@@ -784,6 +814,7 @@ export class VideoRepo {
           $match: {
             _id: {$in: ids},
             ...(includeIneligible ? {} : {active: true}),
+            ...(includeIneligible ? {} : this.musicVideoScope),
           },
         },
         {$set: {topTenRank: {$add: [{$indexOfArray: [ids, '$_id']}, 1]}}},
@@ -799,7 +830,7 @@ export class VideoRepo {
 
   static fetchTopTenCandidates = async () =>
     this.fetchVideoAggr({
-      prevStages: [{$match: {active: true}}],
+      prevStages: [{$match: {active: true, ...this.musicVideoScope}}],
       sortStage: {
         $sort: {
           engagements: -1,
@@ -835,7 +866,7 @@ export class VideoRepo {
 
   static fetchMostEngaged = (page = 1, limit = 5) => {
     return this.fetchVideoAggr({
-      prevStages: [],
+      prevStages: [{ $match: this.musicVideoScope }],
       // sortStage: { $sort: { engagements: -1 } },
       page,
       limit,
@@ -843,7 +874,7 @@ export class VideoRepo {
   }
   static fetchPersonalizedCandidates = (limit = 100) => {
     return this.fetchVideoAggr({
-      prevStages: [{ $match: { active: true } }],
+      prevStages: [{ $match: { active: true, ...this.musicVideoScope } }],
       sortStage: { $sort: { engagements: -1, viewsCount: -1, createdAt: -1 } },
       page: 1,
       limit: Math.min(Math.max(limit, 20), 100),
@@ -851,20 +882,25 @@ export class VideoRepo {
   }
   static fetchRandom = (limit = 3) => {
     return this.fetchVideoAggr({
-      prevStages: [{ $sample: { size: limit * 2 } }],
+      prevStages: [
+        { $match: this.musicVideoScope },
+        { $sample: { size: limit * 2 } },
+      ],
       // sortStage: { $sort: { engagements: -1 } },
       page: 1,
       limit,
     })
   }
 
-  static fetchByCategAndCast = ({ catId, genreId, page, limit }: FetchByCategAndCastParams) => {
+  static fetchByCategAndCast = async ({ catId, genreId, page, limit }: FetchByCategAndCastParams) => {
+    const musicVideoScope = await this.categoryMusicVideoScope(catId)
     return this.fetchVideoAggr({
       prevStages: [
         {
           $match: {
             category: toObjectId(catId),
             genre: toObjectId(genreId),
+            ...musicVideoScope,
           },
         },
       ],
@@ -895,8 +931,8 @@ export class VideoRepo {
         { releaseDate: { $lte: new Date() } },
       ],
     }
+    match.type = type ?? { $ne: 'music-video' }
     if (search) match.title = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' }
-    if (type) match.type = type
     if (genreId) match.genre = toObjectId(genreId)
     if (categoryId) match.category = toObjectId(categoryId)
     if (access === 'original') match.isReeplayOriginal = true
