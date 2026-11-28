@@ -111,6 +111,7 @@ export class CategoryEnumService {
     name: string,
     position: number,
     location: CategoryEnumSchema['location'] = 'Homepage',
+    active = true,
   ) => {
     if (!this.isCategoryLocation(location)) {
       throw new OperationalError('category location is invalid', 400)
@@ -125,6 +126,7 @@ export class CategoryEnumService {
       name,
       position,
       location,
+      active,
     })
 
     return category
@@ -172,7 +174,7 @@ export class CategoryEnumService {
     if (this.isCategoryLocation(data.location) && category.feedType !== 'personalized') {
       category.location = data.location
     }
-    if (typeof data.active === 'boolean' && category.feedType !== 'personalized') {
+    if (typeof data.active === 'boolean') {
       category.active = data.active
     }
     await category.save()
